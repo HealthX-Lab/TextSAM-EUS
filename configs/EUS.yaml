@@ -1,0 +1,36 @@
+DATASET:
+  NAME: "EUS"
+  TRAIN_PATH: "./data/EUS/train"
+  VAL_PATH: "./data/EUS/val"
+  TEST_PATH: "./data/EUS/test"
+  IMAGE_FORMAT: ".tif"
+  MASK_FORMAT: ".tif"
+  NUM_SHOTS: -1
+  TYPE: "binary"
+  IGNORE_BG: True
+
+SAM:
+  MODEL: "vit_b" # [vit_h, vit_l, vit_b, default]
+  CHECKPOINT: "segment_anything/checkpoints"
+  RANK: 4
+
+TRAIN:
+  BATCH_SIZE: 1
+  NUM_EPOCHS: 50
+  LEARNING_RATE: 0.001
+
+TEST:
+  USE_LATEST: False
+
+PROMPT_LEARNER:
+  MODEL: "biomedclip"
+  MODALITY: "text"
+  CTX_INIT:
+  N_CTX_TEXT: 4
+  N_CTX_VISION: 0
+  PROMPT_DEPTH_VISION: 0
+  PROMPT_DEPTH_TEXT: 12
+  CSC: False
+  CLASS_TOKEN_POSITION: "end"
+  BACKBONE: "ViT-B/16"
+  CLASSNAMES: ["background", "tumor"]
