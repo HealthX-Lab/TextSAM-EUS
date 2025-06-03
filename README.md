@@ -17,12 +17,12 @@ conda activate textsam
 pip install torch==2.0.1 torchvision==0.15.2 --index-url https://download.pytorch.org/whl/cu118
 
 ```
-* Clone TextSAM code repository and install requirements
+* Clone PanTumorUSSeg code repository and install requirements
 ```bash
 # Clone MaPLe code base
-git clone https://github.com/HealthX-Lab/SAMCoOp
+git clone https://github.com/HealthX-Lab/PanTumorUSSeg
 
-cd TextSAM/
+cd PanTumorUSSeg/
 # Install requirements
 
 pip install -e .
