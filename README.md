@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # PanTumorUSSeg
 =======
 # Installation
@@ -17,7 +16,7 @@ conda activate textsam
 # Please refer to https://pytorch.org/ if you need a different cuda version
 pip install torch==2.0.1 torchvision==0.15.2 --index-url https://download.pytorch.org/whl/cu118
 
-```
+``'
 * Clone TextSAM code repository and install requirements
 ```bash
 # Clone MaPLe code base
@@ -57,4 +56,3 @@ bash scripts/pipeline.sh EUS outputs
 |   |–– configs/
 |   |   |–– EUS.yaml/
 ```
->>>>>>> a911b2c (added files)
