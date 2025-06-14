@@ -1,22 +1,19 @@
+import os.path as osp
+from collections import OrderedDict
+import math
+import copy
 import torch
 import torch.nn as nn
+from torch.nn import functional as F
+from torch.cuda.amp import GradScaler, autocast
+from open_clip import create_model_from_pretrained, get_tokenizer
+from biomedclip.vision_modules import Block
+from biomedclip.text_modules import BertLayer
+from typing import Optional
 from .prompt_encoder import PromptEncoder
-from transformers import CLIPTextModel
-# from open_clip.src.open_clip import create_model_from_pretrained, get_tokenizer
-from transformers import AutoModel, AutoProcessor, AutoTokenizer
-from clip import clip
-from clip.simple_tokenizer import SimpleTokenizer as _Tokenizer
-import torch.nn.functional as F
-from collections import OrderedDict
-import copy
-
-_tokenizer = _Tokenizer()
-
-def _get_clones(module, N):
-    return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 # Text Prompt Encoder class
-class MultimodalPromptEncoderCLIP(PromptEncoder):
+class MultimodalPromptEncoder(PromptEncoder):
     def __init__(
         self,
         cfg,
@@ -32,48 +29,30 @@ class MultimodalPromptEncoderCLIP(PromptEncoder):
         # self.clip_model,_ = create_model_from_pretrained('hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224')
         # self.tokenizer = get_tokenizer('hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224')
         # clip_model = AutoModel.from_pretrained("chuhac/BiomedCLIP-vit-bert-hf", trust_remote_code=True)
-        clip_model = load_clip_to_cpu(cfg)
+        clip_model = load_biomedclip_to_cpu()
         clip_model.float()
-        # print(clip_model.text_model)
-        # for i,p in model.named_parameters():
-        #     print(i, p.shape)
-        # text_encoder = clip_model.text.transformer
-        # text_encoder = clip_model.text_model
-        # text_proj = clip_model.text_projection
-        self.text_encoder = TextEncoder(clip_model)
+
+        self.prompt_learner = MultiModalPromptLearner(cfg,classnames, clip_model)
+        self.tokenized_prompts = self.prompt_learner.tokenized_prompts
+        self.clip_model = CustomCLIP(cfg, classnames, clip_model)
         self.image_encoder = clip_model.visual
+        self.text_encoder = clip_model.text
         self.logit_scale = clip_model.logit_scale
-        # self.dtype = clip_model.dtype
-        # text_encoder.requires_grad_(False)
-        # text_proj.requires_grad_(False)
-        # self.text_encoder = text_encoder
-        # self.text_proj = text_proj
-        # self.text_encoder_head = nn.Linear(512, embed_dim)
+
         self.text_head = nn.Sequential(
             nn.Linear(512, embed_dim),
-            nn.ReLU(),
-            # nn.BatchNorm1d(embed_dim)
+            nn.GELU(),
+            nn.Linear(embed_dim, embed_dim),
         )
-        self.image_head = nn.Sequential(
-            nn.Linear(512, embed_dim),
-            nn.ReLU(),
-            # nn.BatchNorm1d(embed_dim)
-        )
-        if(cfg.PROMPT_LEARNER.FUSE_SAM):
-            sam_input_dim = 64*64
-            self.sam_head = nn.Sequential(OrderedDict([
-                ("linear1", nn.Linear(sam_input_dim, sam_input_dim // 16)),
-                ("relu", nn.ReLU(inplace=True)),
-                ("linear2", nn.Linear(sam_input_dim // 16, 16))
-            ]))
-        if(cfg.PROMPT_LEARNER.FUSE_TYPE == "attention"):
-            self.cross_attention = nn.MultiheadAttention(embed_dim, num_heads=8, batch_first=True)
-        self.prompt_learner = PromptLearner(cfg,classnames, clip_model)
-        self.tokenized_prompts = self.prompt_learner.tokenized_prompts
 
+        # self.image_head = nn.Sequential(
+        #     nn.Linear(512, embed_dim),
+        #     nn.GELU(),
+        #     nn.Linear(embed_dim, embed_dim),
+        # )
+        
         self.cfg = cfg
-
-        print(sum(p.numel() for p in self.prompt_learner.parameters() if p.requires_grad))
+        self.n_cls = len(classnames)
 
     def forward(
         self, points,
@@ -101,141 +80,88 @@ class MultimodalPromptEncoderCLIP(PromptEncoder):
           torch.Tensor: dense embeddings for the masks, in the shape
             Bx(embed_dim)x(embed_H)x(embed_W)
         """
-        bs = self._get_batch_size(points, boxes, masks, labels)
-        sparse_embeddings = torch.empty(
-            (bs, 0, self.embed_dim), device=self._get_device()
-        )
-        if(self.cfg.PROMPT_LEARNER.FUSE_SAM):
-            reshaped_image_embeddings = image_embeddings.view(bs, 256, -1) # (B,  256, 64*64)
-            reshaped_image_embeddings = self.sam_head(reshaped_image_embeddings).view(bs, -1, 256) # (B, 16, 256)
-        # input_image_embeddings = F.interpolate(
-        #     reshaped_image_embeddings,
-        #     (224, 224),
-        #     mode="bilinear",
-        #     align_corners=False,
+        # bs = self._get_batch_size(points, boxes, masks, labels)
+        bs = self.cfg.TRAIN.BATCH_SIZE
+        # sparse_embeddings = torch.empty(
+        #     (bs, 0, self.embed_dim), device=self._get_device()
         # )
-        # if points is not None:
-        #     coords, labels = points
-        #     point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
-        #     sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
-        # if boxes is not None:
-        #     box_embeddings = self._embed_boxes(boxes)
-        #     sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
+        # if(self.cfg.PROMPT_LEARNER.FUSE_SAM):
+        #     reshaped_image_embeddings = image_embeddings.view(bs, 256, -1) # (B,  256, 64*64)
+        #     reshaped_image_embeddings = self.sam_head(reshaped_image_embeddings).view(bs, -1, 256) # (B, 16, 256)
+
         if labels is not None:
 
             logit_scale = self.logit_scale.exp()
-            tokenized_prompts = self.tokenized_prompts
+
+            prompts, ctx, text_deep_prompts, image_prompts = self.prompt_learner()
+        # prompts, ctx, deep_prompts = self.prompt_learner()
+
+            image_features = self.clip_model.encode_image(clip_image.cuda(), image_prompts[0], image_prompts[1:])
+            text_features = self.clip_model.encode_text(self.tokenized_prompts, prompts, text_deep_prompts)
+            # text_features = self.encode_text(self.tokenized_prompts, prompts, deep_prompts)
+            text_features = text_features / text_features.norm(dim=-1, keepdim=True) # (N, 512)
+
+            # seg_logits = image_features[:, 1:, :]
+            image_features = image_features / image_features.norm(dim=-1, keepdim=True) # (N, 512)
         
-            prompts, shared_ctx, deep_compound_prompts_text, deep_compound_prompts_vision = self.prompt_learner()
-            text_features = self.text_encoder(prompts, tokenized_prompts, deep_compound_prompts_text)
-            image_features = self.image_encoder(clip_image.unsqueeze(0).to(self._get_device()), shared_ctx, deep_compound_prompts_vision)
 
-            # logits = logit_scale * image_features @ text_features.t()
+            similarity_scores = logit_scale * image_features @ text_features.T
 
-            image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-            text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+            predicted_label = similarity_scores.argmax(dim=-1)  # predicted_label.item() if scalar needed
 
-            image_features = self.image_head(image_features).unsqueeze(1)
+            # Select the text feature corresponding to the predicted label (shape: (1, 512))
+            selected_text_feature = text_features[predicted_label]  # shape (1, 512)
 
-            text_features = self.text_head(text_features)
-            labels = [label.item()-1 for label in labels]
-            text_features = text_features[labels]
+            selected_text_feature = self.text_head(selected_text_feature)
+            selected_text_feature = selected_text_feature / selected_text_feature.norm(dim=-1, keepdim=True)  # (1, embed_dim)
 
-            sparse_embeddings_all = []
+            # image_features = self.image_head(image_features)
 
-            for text_feature in text_features:
-                
-                text_feature = text_feature.unsqueeze(0).unsqueeze(0)
+            # cls_token = image_features[:, 0, :].unsqueeze(1)
+            # patch_features = image_features[:, 1:, :]
+            # patch_features = patch_features.reshape(1, 14, 14, -1).permute(0, 3, 1, 2)
+            # patch_features = F.interpolate(patch_features, size=(64, 64), mode='bilinear', align_corners=False)
+            # patch_features = patch_features / patch_features.norm(dim=1, keepdim=True)  # (1, embed_dim, 64, 64)
 
-                if(self.cfg.PROMPT_LEARNER.FUSE_TYPE == "attention"):
-                # Attention-based fusion
-                    if(not self.cfg.PROMPT_LEARNER.FUSE_SAM):
-                        fused_embeddings, _ = self.cross_attention(
-                            text_feature,  # Query (B, 1, embed_dim)
-                            image_features,  # Key (B, 16, embed_dim)
-                            image_features  # Value (B, 16, embed_dim)
-                        )
-                        sparse_embeddings_all.append(torch.cat([sparse_embeddings, fused_embeddings], dim=1))
-                    else:
-                        fused_embeddings, _ = self.cross_attention(
-                            text_features,  # Query (B, 1, embed_dim)
-                            reshaped_image_embeddings,  # Key (B, 16, embed_dim)
-                            reshaped_image_embeddings  # Value (B, 16, embed_dim)
-                        )
-                        sparse_embeddings_all.append(torch.cat([sparse_embeddings, fused_embeddings], dim=1))
+            # Final sparse embeddings with predicted class only
+            sparse_embeddings = torch.empty(
+            (selected_text_feature.shape[0], 0, self.embed_dim), device=self._get_device()
+        )
+            sparse_embeddings = torch.cat([sparse_embeddings, selected_text_feature.unsqueeze(1)], dim=1)
+            
+            # text_features = self.text_head(text_features)
+            # text_features = text_features / text_features.norm(dim=-1, keepdim=True) # (N, 512)
 
-                elif(self.cfg.PROMPT_LEARNER.FUSE_TYPE == "add"):
-                    if(not self.cfg.PROMPT_LEARNER.FUSE_SAM):
-                        fused_embeddings = text_feature + image_features
-                        # print(text_features.shape,image_features.shape)
-                    else:
-                        fused_embeddings = text_feature + image_features + reshaped_image_embeddings
-                    sparse_embeddings_all.append(torch.cat([sparse_embeddings, fused_embeddings], dim=1))
+            # image_features = self.image_head(image_features)
 
-                elif(self.cfg.PROMPT_LEARNER.FUSE_TYPE == "concat"):
-                    if(not self.cfg.PROMPT_LEARNER.FUSE_SAM):
-                        sparse_embeddings_all.append(torch.cat([sparse_embeddings, text_feature, image_features], dim=1))
-                    else:
-                        sparse_embeddings_all.append(torch.cat([sparse_embeddings, text_features, image_features, reshaped_image_embeddings], dim=1))
-            # else:
-            #     sparse_embeddings = torch.cat([sparse_embeddings, text_embeddings], dim=1)
-
-            # print(logits.shape)
-
-            sparse_embeddings = torch.cat(sparse_embeddings_all, dim=0)
-
+            # cls_token = image_features[:,0,:].unsqueeze(1)
+            # patch_features = image_features[:,1:,:]
+            # patch_features = patch_features.reshape(1, 14, 14, -1).permute(0,3,1,2)
+            # patch_features = F.interpolate(patch_features, size=(64, 64), mode='bilinear', align_corners=False)
+            # patch_features = patch_features / patch_features.norm(dim=1, keepdim=True) # (N, 512)
             
 
-
-            # if(self.cfg.PROMPT_LEARNER.FUSE_TYPE == "attention"):
-            # # Attention-based fusion
-            #     if(not self.cfg.PROMPT_LEARNER.FUSE_SAM):
-            #         fused_embeddings, _ = self.cross_attention(
-            #             text_features,  # Query (B, 1, embed_dim)
-            #             image_features,  # Key (B, 16, embed_dim)
-            #             image_features  # Value (B, 16, embed_dim)
-            #         )
-            #         sparse_embeddings = torch.cat([sparse_embeddings, fused_embeddings], dim=1)
-            #     else:
-            #         fused_embeddings, _ = self.cross_attention(
-            #             text_features,  # Query (B, 1, embed_dim)
-            #             reshaped_image_embeddings,  # Key (B, 16, embed_dim)
-            #             reshaped_image_embeddings  # Value (B, 16, embed_dim)
-            #         )
-            #         sparse_embeddings = torch.cat([sparse_embeddings, fused_embeddings], dim=1)
-
-            # elif(self.cfg.PROMPT_LEARNER.FUSE_TYPE == "add"):
-            #     if(not self.cfg.PROMPT_LEARNER.FUSE_SAM):
-            #         fused_embeddings = text_features + image_features
-            #     else:
-            #         fused_embeddings = text_features + image_features + reshaped_image_embeddings
-            #     sparse_embeddings = torch.cat([sparse_embeddings,fused_embeddings], dim=1)
-
-            # elif(self.cfg.PROMPT_LEARNER.FUSE_TYPE == "concat"):
-            #     if(not self.cfg.PROMPT_LEARNER.FUSE_SAM):
-            #         sparse_embeddings = torch.cat([sparse_embeddings, text_features, image_features], dim=1)
-            #     else:
-            #         sparse_embeddings = torch.cat([sparse_embeddings, text_features, image_features, reshaped_image_embeddings], dim=1)
-            # else:
-            #     sparse_embeddings = torch.cat([sparse_embeddings, text_embeddings], dim=1)
-
-            # print(logits.shape)
-
-
-
-            # text_embeddings = text_features.view(-1, 2, 256)
-            # sparse_embeddings = torch.cat([sparse_embeddings, logits], dim=1)
-            # return sparse_embeddings
-
+            # sparse_embeddings_all = []
+            
+            # # for text_embeddings, neg_text_embeddings in zip(text_features, neg_text_features):
+            # for text_embeddings in text_features:
+            #     text_embeddings = text_embeddings.expand(1, 1, -1)
+            #     # neg_text_embeddings = neg_text_embeddings.unsqueeze(0).unsqueeze(0)
+            
+            #     # sparse_embeddings_all.append(torch.cat([sparse_embeddings, image_features, text_embeddings], dim=1))
+            #     # sparse_embeddings_all.append(torch.cat([sparse_embeddings, cls_token, text_embeddings], dim=1))
+            #     sparse_embeddings_all.append(torch.cat([sparse_embeddings, text_embeddings], dim=1))
+                   
+            # sparse_embeddings = torch.cat(sparse_embeddings_all, dim=0)
 
         if masks is not None:
             dense_embeddings = self._embed_masks(masks)
         else:
             dense_embeddings = self.no_mask_embed.weight.reshape(1, -1, 1, 1).expand(
-                bs, -1, self.image_embedding_size[0], self.image_embedding_size[1]
+                selected_text_feature.shape[0], -1, self.image_embedding_size[0], self.image_embedding_size[1]
             )
 
-        return sparse_embeddings, dense_embeddings
+        return sparse_embeddings, dense_embeddings, similarity_scores
     
     def _get_batch_size(self, points, boxes, masks, labels):
         """
@@ -252,75 +178,47 @@ class MultimodalPromptEncoderCLIP(PromptEncoder):
         else:
             return 1
 
-def load_clip_to_cpu(cfg):
-    backbone_name = cfg.PROMPT_LEARNER.BACKBONE
-    url = clip._MODELS[backbone_name]
-    model_path = clip._download(url)
+def load_biomedclip_to_cpu():
+    
+    model, _ = create_model_from_pretrained('hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224')
+    
+    vision_target_network = nn.Sequential(*[Block(768,12) for i in range(12)]).to('cuda')
+    vision_network = model.visual.trunk.blocks.to('cuda')
 
-    try:
-        # loading JIT archive
-        model = torch.jit.load(model_path, map_location="cpu").eval()
-        state_dict = None
+    text_target_network = nn.ModuleList([BertLayer() for i in range(12)]).to('cuda')
+    text_network = model.text.transformer.encoder.layer.to('cuda')
 
-    except RuntimeError:
-        state_dict = torch.load(model_path, map_location="cpu")
-    design_details = {"trainer": 'MaPLe',
-                      "vision_depth": 0,
-                      "language_depth": 0, "vision_ctx": 0,
-                      "language_ctx": 0,
-                      "maple_length": cfg.PROMPT_LEARNER.N_CTX_TEXT}
-    model = clip.build_model(state_dict or model.state_dict(), design_details)
+    for target_param, param in zip(vision_target_network.parameters(), vision_network.parameters()):
+            target_param.data.copy_(param.data)
 
-    return model
+    for target_param, param in zip(text_target_network.parameters(), text_network.parameters()):
+            target_param.data.copy_(param.data)
 
+    model.visual.trunk.blocks = vision_target_network.to('cuda')
+    model.text.transformer.encoder.layer  = text_target_network.to('cuda')
 
-class TextEncoder(nn.Module):
-    def __init__(self, clip_model):
-        super().__init__()
-        self.transformer = clip_model.transformer
-        self.positional_embedding = clip_model.positional_embedding
-        self.ln_final = clip_model.ln_final
-        self.text_projection = clip_model.text_projection
-        self.dtype = clip_model.dtype
+    return model.to('cuda').eval()
 
-    def forward(self, prompts, tokenized_prompts, compound_prompts_deeper_text):
-        x = prompts + self.positional_embedding.type(self.dtype)
-        x = x.permute(1, 0, 2)  # NLD -> LND
-        # Pass as the list, as nn.sequential cannot process multiple arguments in the forward pass
-        combined = [x, compound_prompts_deeper_text, 0]  # third argument is the counter which denotes depth of prompt
-        outputs = self.transformer(combined)
-        x = outputs[0]  # extract the x back from here
-        x = x.permute(1, 0, 2)  # LND -> NLD
-        x = self.ln_final(x).type(self.dtype)
-
-        # x.shape = [batch_size, n_ctx, transformer.width]
-        # take features from the eot embedding (eot_token is the highest number in each sequence)
-        x = x[torch.arange(x.shape[0]), tokenized_prompts.argmax(dim=-1)] @ self.text_projection
-
-        return x
-
-class PromptLearner(nn.Module):
+class MultiModalPromptLearner(nn.Module):
     def __init__(self, cfg, classnames, clip_model):
         super().__init__()
         n_cls = len(classnames)
         n_ctx = cfg.PROMPT_LEARNER.N_CTX_TEXT
         ctx_init = cfg.PROMPT_LEARNER.CTX_INIT
-        dtype = clip_model.dtype
-        ctx_dim = clip_model.ln_final.weight.shape[0]
-        clip_imsize = clip_model.visual.input_resolution
-        cfg_imsize = 224
+        dtype = clip_model.text.transformer.dtype
+        ctx_dim = 768
+        self.tokenizer = get_tokenizer('hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224')
         # Default is 1, which is compound shallow prompting
         assert cfg.PROMPT_LEARNER.PROMPT_DEPTH_TEXT >= 1, "For MaPLe, PROMPT_DEPTH should be >= 1"
-        self.compound_prompts_depth = cfg.PROMPT_LEARNER.PROMPT_DEPTH_TEXT  # max=12, but will create 11 such shared prompts
-        assert cfg_imsize == clip_imsize, f"cfg_imsize ({cfg_imsize}) must equal to clip_imsize ({clip_imsize})"
+        self.prompts_depth = cfg.PROMPT_LEARNER.PROMPT_DEPTH_TEXT  # max=12, but will create 11 such shared prompts
 
-        if ctx_init and (n_ctx) <= 4:
+        if ctx_init:
             # use given words to initialize context vectors
             ctx_init = ctx_init.replace("_", " ")
             n_ctx = n_ctx
-            prompt = clip.tokenize(ctx_init)
+            prompt = self.tokenizer(ctx_init).to("cuda")
             with torch.no_grad():
-                embedding = clip_model.token_embedding(prompt).type(dtype)
+                embedding = clip_model.text.transformer.embeddings.word_embeddings(prompt).type(dtype)
             ctx_vectors = embedding[0, 1: 1 + n_ctx, :]
             prompt_prefix = ctx_init
         else:
@@ -331,31 +229,28 @@ class PromptLearner(nn.Module):
         print('MaPLe design: Multi-modal Prompt Learning')
         print(f'Initial context: "{prompt_prefix}"')
         print(f"Number of MaPLe context words (tokens): {n_ctx}")
-        # These below, related to the shallow prompts
-        # Linear layer so that the tokens will project to 512 and will be initialized from 768
-        self.proj = nn.Linear(ctx_dim, 768)
-        self.proj.float()
-        self.ctx = nn.Parameter(ctx_vectors)
-        # These below parameters related to the shared prompts
-        # Define the compound prompts for the deeper layers
 
-        # Minimum can be 1, which defaults to shallow MaPLe
-        # compound prompts
-        self.compound_prompts_text = nn.ParameterList([nn.Parameter(torch.empty(n_ctx, 512))
-                                                      for _ in range(self.compound_prompts_depth - 1)])
-        for single_para in self.compound_prompts_text:
-            nn.init.normal_(single_para, std=0.02)
-        # Also make corresponding projection layers, for each prompt
-        single_layer = nn.Linear(ctx_dim, 768)
-        self.compound_prompt_projections = _get_clones(single_layer, self.compound_prompts_depth - 1)
+        self.ctx = nn.Parameter(ctx_vectors)
+
+        self.deep_prompts = nn.ParameterList([nn.Parameter(torch.empty(n_ctx, 768)) for _ in range(self.prompts_depth - 1)])
+
+        self.vision_deep_prompts = nn.ParameterList([nn.Parameter(torch.empty(n_ctx, 768)) for _ in range(self.prompts_depth)])
+
+        # self.compound_prompts_text = nn.ParameterList([nn.Parameter(torch.empty(n_ctx, 512))
+        #                                               for _ in range(self.compound_prompts_depth - 1)])
+        for single_prompt in self.deep_prompts:
+            nn.init.normal_(single_prompt, std=0.02)
+
+        for single_prompt in self.vision_deep_prompts:
+            nn.init.normal_(single_prompt, std=0.02)
 
         classnames = [name.replace("_", " ") for name in classnames]
-        name_lens = [len(_tokenizer.encode(name)) for name in classnames]
+        name_lens = [len(self.tokenizer(name)) for name in classnames]
         prompts = [prompt_prefix + " " + name + "." for name in classnames]
 
-        tokenized_prompts = torch.cat([clip.tokenize(p) for p in prompts])  # (n_cls, n_tkn)
+        tokenized_prompts = torch.cat([self.tokenizer(p) for p in prompts]).to("cuda")  # (n_cls, n_tkn)
         with torch.no_grad():
-            embedding = clip_model.token_embedding(tokenized_prompts).type(dtype)
+            embedding = clip_model.text.transformer.embeddings.word_embeddings(tokenized_prompts).type(dtype)
 
         # These token vectors will be saved when in save_model(),
         # but they should be ignored in load_model() as we want to use
@@ -367,68 +262,28 @@ class PromptLearner(nn.Module):
         self.n_ctx = n_ctx
         self.tokenized_prompts = tokenized_prompts  # torch.Tensor
         self.name_lens = name_lens
-        self.class_token_position = cfg.PROMPT_LEARNER.CLASS_TOKEN_POSITION
 
     def construct_prompts(self, ctx, prefix, suffix, label=None):
-        if self.class_token_position == "end":
-                prompts = torch.cat(
-                    [
-                        prefix,  # (n_cls, 1, dim)
-                        ctx,     # (n_cls, n_ctx, dim)
-                        suffix,  # (n_cls, *, dim)
-                    ],
-                    dim=1,
-                )
+        # dim0 is either batch_size (during training) or n_cls (during testing)
+        # ctx: context tokens, with shape of (dim0, n_ctx, ctx_dim)
+        # prefix: the sos token, with shape of (n_cls, 1, ctx_dim)
+        # suffix: remaining tokens, with shape of (n_cls, *, ctx_dim)
 
-        elif self.class_token_position == "middle":
-            half_n_ctx = self.n_ctx // 2
-            prompts = []
-            for i in range(self.n_cls):
-                name_len = self.name_lens[i]
-                prefix_i = prefix[i : i + 1, :, :]
-                class_i = suffix[i : i + 1, :name_len, :]
-                suffix_i = suffix[i : i + 1, name_len:, :]
-                ctx_i_half1 = ctx[i : i + 1, :half_n_ctx, :]
-                ctx_i_half2 = ctx[i : i + 1, half_n_ctx:, :]
-                prompt = torch.cat(
-                    [
-                        prefix_i,     # (1, 1, dim)
-                        ctx_i_half1,  # (1, n_ctx//2, dim)
-                        class_i,      # (1, name_len, dim)
-                        ctx_i_half2,  # (1, n_ctx//2, dim)
-                        suffix_i,     # (1, *, dim)
-                    ],
-                    dim=1,
-                )
-                prompts.append(prompt)
-            prompts = torch.cat(prompts, dim=0)
+        if label is not None:
+            prefix = prefix[label]
+            suffix = suffix[label]
 
-        elif self.class_token_position == "front":
-            prompts = []
-            for i in range(self.n_cls):
-                name_len = self.name_lens[i]
-                prefix_i = prefix[i : i + 1, :, :]
-                class_i = suffix[i : i + 1, :name_len, :]
-                suffix_i = suffix[i : i + 1, name_len:, :]
-                ctx_i = ctx[i : i + 1, :, :]
-                prompt = torch.cat(
-                    [
-                        prefix_i,  # (1, 1, dim)
-                        class_i,   # (1, name_len, dim)
-                        ctx_i,     # (1, n_ctx, dim)
-                        suffix_i,  # (1, *, dim)
-                    ],
-                    dim=1,
-                )
-                prompts.append(prompt)
-            prompts = torch.cat(prompts, dim=0)
-
-        else:
-            raise ValueError
+        prompts = torch.cat(
+            [
+                prefix,  # (dim0, 1, dim)
+                ctx,  # (dim0, n_ctx, dim)
+                suffix,  # (dim0, *, dim)
+            ],
+            dim=1,
+        )
 
         return prompts
-
-
+    
     def forward(self):
         ctx = self.ctx
 
@@ -439,13 +294,102 @@ class PromptLearner(nn.Module):
         suffix = self.token_suffix
         prompts = self.construct_prompts(ctx, prefix, suffix)
 
-        # Before returning, need to transform
-        # prompts to 768 for the visual side
-        visual_deep_prompts = []
-        for index, layer in enumerate(self.compound_prompt_projections):
-            visual_deep_prompts.append(layer(self.compound_prompts_text[index]))
-        # Now the other way around
-        # We will project the textual prompts from 512 to 768
-        return prompts, self.proj(self.ctx), self.compound_prompts_text, visual_deep_prompts   # pass here original, as for visual 768 is required
-        
+        return prompts, self.ctx, self.deep_prompts, self.vision_deep_prompts
 
+class CustomCLIP(nn.Module):
+    def __init__(self, cfg, classnames, clip_model, output_hidden_states=False):
+        super(CustomCLIP, self).__init__()
+        self.vision_model = clip_model.visual
+        self.text_model = clip_model.text
+        self.logit_scale = clip_model.logit_scale
+        self.prompt_depth = cfg.PROMPT_LEARNER.PROMPT_DEPTH_TEXT
+        self.prompt_length = cfg.PROMPT_LEARNER.N_CTX_TEXT
+        self.output_hidden_states = output_hidden_states
+        # self.prompt_tokens = nn.Parameter(torch.empty(prompt_depth, prompt_length, 768))
+        self.dtype = self.text_model.transformer.dtype
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    def encode_image(self, x, ctx: torch.Tensor = None, prompt_tokens: torch.Tensor = None):
+        trunk = self.vision_model.trunk
+        x = trunk.patch_embed(x)
+        # C, H, W = x.shape
+        x = trunk._pos_embed(x)
+        ctx = ctx.expand(x.shape[0], -1, -1)
+        x = torch.cat([x, ctx], dim=1)
+        x = trunk.norm_pre(x)
+
+        hidden_states = []
+
+        for i, block in enumerate(trunk.blocks):
+            if(i == 0):
+                x = block(x)
+            elif(i < self.prompt_depth - 1 and i > 0):
+                x = block(x, prompt_tokens[i-1])
+            else:
+                x = block(x) 
+
+            hidden_states.append(x)
+
+        x = x[:, 0:x.shape[1] - self.prompt_length, :]
+
+        x = trunk.norm(x)
+
+        x = x[:, 0, :]
+
+        # Linear Projection: 768 -> 512
+        x = self.vision_model.head(x)
+
+        if self.output_hidden_states:
+            return x, hidden_states
+        else:
+            return x
+        
+    def encode_text(self, tokenized_prompts, text_prompts, prompt_tokens : torch.Tensor = None, attention_mask: Optional[torch.LongTensor] = None):
+
+        if attention_mask is None:
+            attention_mask = (tokenized_prompts != self.text_model.config.pad_token_id).long()
+        
+        x = self.text_model.transformer.embeddings(
+            inputs_embeds=text_prompts
+        )
+
+        extended_attention_mask = attention_mask[:, None, None, :]
+        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
+
+        for i, layer in enumerate(self.text_model.transformer.encoder.layer):
+            if(i == 0):
+                x = layer(x, attention_mask=extended_attention_mask)
+            elif(i < self.prompt_depth - 1 and i > 0):
+                x = layer(x, attention_mask=extended_attention_mask, prompt_tokens=prompt_tokens[i-1])
+            else:
+                x = layer(x, attention_mask=extended_attention_mask)
+            x = x[0]
+
+        pooled_out = x[:, 0, :]
+        projected = self.text_model.proj(pooled_out)
+        x = self.text_model.proj(x)
+
+        # return projected
+        return projected
+    
+    def forward(self, image):
+
+        B, C, H, W = image.shape
+
+        logit_scale = self.logit_scale.exp()
+
+        prompts, ctx, text_deep_prompts, image_prompts = self.prompt_learner()
+        # prompts, ctx, deep_prompts = self.prompt_learner()
+
+
+        image_features = self.encode_image(image, image_prompts[0], image_prompts[1:])
+        text_features = self.encode_text(self.tokenized_prompts, prompts, text_deep_prompts)
+        # text_features = self.encode_text(self.tokenized_prompts, prompts, deep_prompts)
+        text_features = text_features / text_features.norm(dim=-1, keepdim=True) # (N, 512)
+
+        # seg_logits = image_features[:, 1:, :]
+        image_features = image_features / image_features.norm(dim=-1, keepdim=True) # (N, 512)
+        # seg_logits = seg_logits / seg_logits.norm(dim=-1, keepdim=True) # (N, 512)
+       
+        return image_features

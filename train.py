@@ -105,10 +105,18 @@ def evaluate_validation_loss(model, val_dataloader, device, seg_loss):
         for batch in tqdm(val_dataloader, desc="Validation"):
             outputs = model(batched_input=batch, multimask_output=False)
             stk_gt, stk_out = utils.stacking_batch(batch, outputs)
-            stk_out = stk_out.squeeze(1).permute(1,0,2,3)
+            stk_out = stk_out.unsqueeze(1)
+            # stk_out = stk_out.squeeze(1).transpose(1,0)
             # stk_out = stk_out.squeeze(1)
             # stk_gt = stk_gt.unsqueeze(1)  # Convert to [B, C, H, W]
-            loss = seg_loss(stk_out, stk_gt.float().to(device))
+            # loss = seg_loss(stk_out, stk_gt.float().to(device))
+            pixel_loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device))
+            labels = torch.stack([item["label"] for item in batch]).to(device)  # shape (B,)
+            class_logits = torch.stack([out["classification"] for out in outputs], dim=0)
+            image_loss = class_loss(class_logits, labels)
+
+            # Total loss
+            loss = image_loss + pixel_loss
             val_losses.append(loss.item())
     return mean(val_losses)
 
@@ -159,9 +167,10 @@ print(f"Parameters to be updated: {enabled}")
 print("Number of trainable parameters: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
 # Initialize optimizer and Loss
 optimizer = AdamW(model.parameters(), lr=cfg.TRAIN.LEARNING_RATE)
-# seg_loss = monai.losses.DiceCELoss(sigmoid=True, squared_pred=True, reduction='mean')
+# seg_loss = monai.losses.DiceCELoss(softmax=True, squared_pred=True, reduction='mean')
 seg_loss = monai.losses.DiceLoss(sigmoid=True, squared_pred=True, reduction='mean')
 ce_loss = nn.BCEWithLogitsLoss(reduction="mean")
+class_loss = nn.CrossEntropyLoss()
 num_epochs = cfg.TRAIN.NUM_EPOCHS
 scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
 
@@ -211,15 +220,23 @@ for epoch in range(start_epoch, num_epochs):
         outputs = model(batched_input=batch, multimask_output=False)
         # print(batch[0]["ground_truth_mask"])
         stk_gt, stk_out = utils.stacking_batch(batch, outputs)
-        stk_out = stk_out.squeeze(1).permute(1,0,2,3)
+        stk_out = stk_out.unsqueeze(1)
+        # stk_out = stk_out.squeeze(1).transpose(1,0)
         # stk_gt = stk_gt.unsqueeze(1)  # We need to get the [B, C, H, W] starting from [H, W]
         # mask_pred = np.uint8(outputs[0]['masks'].detach().cpu().numpy()) * 255
         # print(np.unique(mask_pred))
-        # print(sparse_embeddings.shape,teacher_sparse_embeddings.shape)
         # loss = seg_loss(stk_out, stk_gt.float().to(device))  + mse_loss(sparse_embeddings,teacher_sparse_embeddings)
         # loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device))
-        loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device))
+        pixel_loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device))
         # loss = seg_loss(stk_out, stk_gt.float().to(device))
+
+        # Classification loss
+        labels = torch.stack([item["label"] for item in batch]).to(device)  # shape (B,)
+        class_logits = torch.stack([out["classification"] for out in outputs])
+        image_loss = class_loss(class_logits, labels)
+
+        # Total loss
+        loss = 0.7*image_loss + pixel_loss
 
         optimizer.zero_grad()
         loss.backward()

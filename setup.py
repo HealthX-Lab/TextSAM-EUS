@@ -8,7 +8,7 @@
 from setuptools import find_packages, setup
 
 setup(
-    name="textsam",
+    name="PanTumorSeg",
     version="0.0.1",
     author="Taha Koleilat",
     python_requires=">=3.9",

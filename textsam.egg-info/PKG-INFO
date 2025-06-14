@@ -1,0 +1,39 @@
+Metadata-Version: 2.4
+Name: textsam
+Version: 0.0.1
+Author: Taha Koleilat
+Requires-Python: >=3.9
+License-File: LICENSE
+Requires-Dist: monai
+Requires-Dist: open_clip_torch
+Requires-Dist: pandas
+Requires-Dist: matplotlib
+Requires-Dist: easydict
+Requires-Dist: scikit-image
+Requires-Dist: albumentations
+Requires-Dist: SimpleITK>=2.2.1
+Requires-Dist: ftfy
+Requires-Dist: transformers
+Requires-Dist: nibabel
+Requires-Dist: tqdm
+Requires-Dist: scipy
+Requires-Dist: ipympl
+Requires-Dist: connected-components-3d
+Requires-Dist: opencv-python
+Requires-Dist: jupyterlab
+Requires-Dist: ipywidgets
+Provides-Extra: all
+Requires-Dist: pycocotools; extra == "all"
+Requires-Dist: opencv-python; extra == "all"
+Requires-Dist: onnx; extra == "all"
+Requires-Dist: onnxruntime; extra == "all"
+Provides-Extra: dev
+Requires-Dist: flake8; extra == "dev"
+Requires-Dist: isort; extra == "dev"
+Requires-Dist: black; extra == "dev"
+Requires-Dist: mypy; extra == "dev"
+Dynamic: author
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python

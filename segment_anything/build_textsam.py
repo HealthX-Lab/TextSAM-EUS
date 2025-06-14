@@ -12,7 +12,7 @@ from tqdm import tqdm
 from functools import partial
 
 from .modeling import ImageEncoderViT, MaskDecoder, PromptEncoder, textsam, TwoWayTransformer
-from .modeling import TextPromptEncoderBiomedCLIP, TextPromptEncoderCLIP
+from .modeling import TextPromptEncoderBiomedCLIP, TextPromptEncoderCLIP, MultimodalPromptEncoder
 
 from .modeling import TextSam
 # File URLs
@@ -102,8 +102,7 @@ def _build_textsam(
     image_size = 1024
     vit_patch_size = 16
     image_embedding_size = image_size // vit_patch_size
-    if(cfg.PROMPT_LEARNER.MODEL == "biomedclip" and cfg.PROMPT_LEARNER.MODALITY == "text"):
-        clip_prompt_encoder = TextPromptEncoderBiomedCLIP(
+    clip_prompt_encoder = MultimodalPromptEncoder(
             cfg=cfg,
             embed_dim=prompt_embed_dim,
             image_embedding_size=(image_embedding_size, image_embedding_size),
@@ -111,16 +110,25 @@ def _build_textsam(
             mask_in_chans=16,
             classnames=classnames
         )
+    # if(cfg.PROMPT_LEARNER.MODEL == "biomedclip" and cfg.PROMPT_LEARNER.MODALITY == "text"):
+    #     clip_prompt_encoder = TextPromptEncoderBiomedCLIP(
+    #         cfg=cfg,
+    #         embed_dim=prompt_embed_dim,
+    #         image_embedding_size=(image_embedding_size, image_embedding_size),
+    #         input_image_size=(image_size, image_size),
+    #         mask_in_chans=16,
+    #         classnames=classnames
+    #     )
 
-    elif(cfg.PROMPT_LEARNER.MODEL == "clip" and cfg.PROMPT_LEARNER.MODALITY == "text"):
-        clip_prompt_encoder = TextPromptEncoderCLIP(
-            cfg=cfg,
-            embed_dim=prompt_embed_dim,
-            image_embedding_size=(image_embedding_size, image_embedding_size),
-            input_image_size=(image_size, image_size),
-            mask_in_chans=16,
-            classnames=classnames
-        )
+    # elif(cfg.PROMPT_LEARNER.MODEL == "clip" and cfg.PROMPT_LEARNER.MODALITY == "text"):
+    #     clip_prompt_encoder = TextPromptEncoderCLIP(
+    #         cfg=cfg,
+    #         embed_dim=prompt_embed_dim,
+    #         image_embedding_size=(image_embedding_size, image_embedding_size),
+    #         input_image_size=(image_size, image_size),
+    #         mask_in_chans=16,
+    #         classnames=classnames
+    #     )
     
     sam = TextSam(
         image_encoder=ImageEncoderViT(

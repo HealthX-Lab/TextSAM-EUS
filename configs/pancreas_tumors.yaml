@@ -1,8 +1,8 @@
 DATASET:
-  NAME: "EUS"
-  TRAIN_PATH: "./data/EUS/train"
-  VAL_PATH: "./data/EUS/val"
-  TEST_PATH: "./data/EUS/test"
+  NAME: "pancreas_tumors"
+  TRAIN_PATH: "./data/pancreas_tumors/train"
+  VAL_PATH: "./data/pancreas_tumors/val"
+  TEST_PATH: "./data/pancreas_tumors/test"
   IMAGE_FORMAT: ".tif"
   MASK_FORMAT: ".tif"
   NUM_SHOTS: -1
@@ -16,8 +16,8 @@ SAM:
 
 TRAIN:
   BATCH_SIZE: 4
-  NUM_EPOCHS: 20
-  LEARNING_RATE: 0.003
+  NUM_EPOCHS: 5
+  LEARNING_RATE: 0.002
 
 TEST:
   USE_LATEST: False
@@ -25,12 +25,12 @@ TEST:
 PROMPT_LEARNER:
   MODEL: "biomedclip"
   MODALITY: "text"
-  CTX_INIT:
+  CTX_INIT: "an ultrasound scan of"
   N_CTX_TEXT: 4
-  N_CTX_VISION: 0
-  PROMPT_DEPTH_VISION: 0
+  N_CTX_VISION: 4
+  PROMPT_DEPTH_VISION: 12
   PROMPT_DEPTH_TEXT: 12
-  CSC: False
+  CSC: True
   CLASS_TOKEN_POSITION: "end"
   BACKBONE: "ViT-B/16"
-  CLASSNAMES: ["background","tumor"]
+  CLASSNAMES: ["healthy pancreas","pancreas with tumor"]

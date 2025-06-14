@@ -93,8 +93,8 @@ class TextPromptEncoderBiomedCLIP(PromptEncoder):
             seg_logits = logit_scale * seg_logits @ text_features.T
             image_features = image_features / image_features.norm(dim=-1, keepdim=True) # (N, 512)
 
-            labels = [label.item() for label in labels]
-            text_features = text_features[labels]
+            # labels = [label.item() for label in labels]
+            # text_features = text_features[labels]
             
             text_features = self.text_head(text_features)
             text_features = text_features / text_features.norm(dim=-1, keepdim=True) # (N, 512)

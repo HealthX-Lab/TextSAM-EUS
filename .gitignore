@@ -1,2 +1,5 @@
-output/
-data/EUS
+output/*
+output_new/*
+data/*
+segment_anything/checkpoints/*
+__pycache__
