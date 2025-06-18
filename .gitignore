@@ -1,5 +1,6 @@
 output/*
 output_new/*
+output_EUS/*
 data/*
 segment_anything/checkpoints/*
 __pycache__

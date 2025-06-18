@@ -12,7 +12,6 @@ from datasets.dataloader import DatasetSegmentation, collate_fn
 from utils.processor import Samprocessor
 from segment_anything import build_sam_vit_b, SamPredictor, build_textsam_vit_b,  build_textsam_vit_h, build_textsam_vit_l
 from utils.lora import LoRA_Sam
-import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import yaml
 import torch.nn.functional as F
@@ -72,12 +71,6 @@ def get_arguments():
 
     return cfg
 
-def compute_binary_dice(pred, target, eps=1e-6):
-    pred = np.uint8(pred > 0)
-    target = np.uint8(target > 0)
-    intersection = (pred * target).sum()
-    dice = (2.0 * intersection) / (pred.sum() + target.sum() + eps)
-    return dice
 
 def print_args(args, cfg):
     logging.info("***************")
@@ -163,39 +156,64 @@ with torch.no_grad():
     processor = Samprocessor(model)
 
     dice_scores = {}
+
+    for text_label in classnames[1:]:
+    # text_label = "all"
+        dice_scores[text_label] = []
+        os.makedirs(os.path.join(cfg.output_dir, cfg.DATASET.NAME, "seg_results", f"seed{cfg.seed}", text_label,results_name),exist_ok=True)
+        os.makedirs(os.path.join(cfg.output_dir, cfg.DATASET.NAME, "gt_masks", f"seed{cfg.seed}", text_label,results_name),exist_ok=True)
     
     dataset = DatasetSegmentation(cfg, processor, mode="test")
     test_dataloader = DataLoader(dataset, batch_size=1, collate_fn=collate_fn)
     model.eval()
     model.to(device)
 
-    # Output directory for predictions
-    out_dir = os.path.join(cfg.output_dir, cfg.DATASET.NAME, "seg_results", f"seed{cfg.seed}", results_name)
-    gt_dir = os.path.join(cfg.output_dir, cfg.DATASET.NAME, "gt_masks", f"seed{cfg.seed}", results_name)
-    os.makedirs(out_dir, exist_ok=True)
-    os.makedirs(gt_dir, exist_ok=True)
-
-    dice_scores = []
-    model.eval()
-    model.to(device)
-
-    for batch in tqdm(test_dataloader):
+    for i, batch in enumerate(tqdm(test_dataloader)):
+        if(batch[0]["mask_name"].startswith("H")):
+            continue
         outputs = model(batched_input=batch, multimask_output=False)
-        image_name = batch[0]["image_name"]
-
+        # stk_gt, stk_out = utils.stacking_batch(batch, outputs)
         stk_gt = batch[0]["ground_truth_mask"]
-        stk_out = torch.cat([out["masks"].squeeze(0) for out in outputs], dim=0).squeeze(0)
+        stk_out = torch.cat([out["masks"].squeeze(0) for out in outputs], dim=0)
+        text_labels = batch[0]["text_labels"].squeeze(0)
+        # import matplotlib.pyplot as plt
+        # plt.imshow(stk_out[0].detach().cpu())
+        # plt.show()
+        for j,label in enumerate(batch[0]["text_labels"].squeeze(0)):
+            
+            if(label == 0):
+                continue
+            label_j = np.uint8(label.detach().cpu())
+            mask_pred = np.uint8(stk_out[j].detach().cpu()) 
+            gt_mask = np.uint8(stk_gt[j].detach().cpu())
 
-        stk_out = stk_out.cpu().numpy()
-        # mask_probs = F.sigmoid(stk_out, dim=0)
+            intersection = (mask_pred * gt_mask).sum()
+            dice = (2.0 * intersection) / (mask_pred.sum() + gt_mask.sum() + 1e-6)
+            
+            # Append Dice score to the corresponding label's list
+            dice_scores[classnames[label_j]].append(dice.item())
 
-        # mask_pred = torch.argmax(mask_probs, dim=0).detach().cpu().numpy()
-        gt_mask = stk_gt[0].detach().cpu().numpy()
-        dice = compute_binary_dice(stk_out, gt_mask)
-        dice_scores.append(dice)
+            # print(mask_pred.shape,gt_mask.shape)
+            cv2.imwrite(os.path.join(cfg.output_dir,\
+                                    cfg.DATASET.NAME, \
+                                    "seg_results",
+                                    f"seed{cfg.seed}", \
+                                    classnames[label_j], \
+                                    results_name, \
+                                    batch[0]["mask_name"]), mask_pred*255)
 
-        cv2.imwrite(os.path.join(out_dir, batch[0]["mask_name"]), (stk_out * 255).astype(np.uint8))
-        cv2.imwrite(os.path.join(gt_dir, batch[0]["mask_name"]), (gt_mask * 255).astype(np.uint8))
+            cv2.imwrite(os.path.join(cfg.output_dir,\
+                                    cfg.DATASET.NAME, \
+                                    "gt_masks",
+                                    f"seed{cfg.seed}", \
+                                    classnames[label_j], \
+                                    results_name, \
+                                    batch[0]["mask_name"]), gt_mask*255)
 
-    overall_average = mean(dice_scores)
-    print(f"\nOverall Binary Dice Score across all test images: {overall_average:.4f}")
+mean_dice_scores = {label: mean(scores) for label, scores in dice_scores.items() if len(scores)!= 0}
+overall_average = mean(mean_dice_scores.values())
+# Print or log the mean Dice scores
+print("\nMean Dice Scores:")
+for label, mean_dice in mean_dice_scores.items():
+    print(f"{label}: {mean_dice:.4f}")
+print(f"Overall Average Dice Score: {overall_average:.4f}")

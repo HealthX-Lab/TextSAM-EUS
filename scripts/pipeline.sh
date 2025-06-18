@@ -1,12 +1,12 @@
 CFG=$1
 OUTPUT=$2
-DATASET=pancreas_tumors
 
-for SEED in 1
+for SEED in 3
 do
     python train.py --config-file configs/${CFG}.yaml \
     --output-dir ${OUTPUT} \
-    --seed ${SEED}
+    --seed ${SEED} \
+    --resume
 
     python inference_eval_text.py --config-file configs/${CFG}.yaml \
     --output-dir ${OUTPUT} \

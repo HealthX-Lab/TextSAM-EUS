@@ -66,6 +66,22 @@ class DatasetSegmentation(Dataset):
             for img_path in self.img_files:
                 self.mask_files.append(os.path.join(cfg.DATASET.TEST_PATH,'masks', os.path.basename(img_path)[:-4] + cfg.DATASET.MASK_FORMAT))
 
+        # # Filter images based on the provided .txt file
+        # if train_list_file and os.path.exists(train_list_file) and self.mode == "train":
+        #     with open(train_list_file, "r") as f:
+        #         allowed_images = {line.strip() for line in f}
+
+        #     # Keep only images that are listed in the .txt file
+        #     filtered_img_files = []
+        #     filtered_mask_files = []
+        #     for img_path, mask_path in zip(self.img_files, self.mask_files):
+        #         if os.path.basename(img_path)[:-4] in allowed_images:
+        #             filtered_img_files.append(img_path)
+        #             filtered_mask_files.append(mask_path)
+
+        #     self.img_files = filtered_img_files
+        #     self.mask_files = filtered_mask_files
+
         # Handle k-shot sampling
         if num_shots != -1:
             if seed is not None:
@@ -75,6 +91,8 @@ class DatasetSegmentation(Dataset):
             self.mask_files = [self.mask_files[i] for i in indices]
 
         self.caption = caption.lower()
+
+        # self.caption_mapping = DATASET_LABEL_MAPPINGS[cfg.DATASET.NAME]
 
         # _, self.clip_preprocess = clip.load("ViT-B/16", device="cpu")
         self.clip_preprocess = transforms.Compose([
@@ -98,43 +116,58 @@ class DatasetSegmentation(Dataset):
         img_path = self.img_files[index]
         mask_path = self.mask_files[index]
         # get image and mask in PIL format
-        image = Image.open(img_path).convert("RGB")
+        image =  Image.open(img_path).convert("RGB")
         clip_image = self.clip_preprocess(image)
         mask = Image.open(mask_path)
         mask = mask.convert('L')
-        ground_truth_mask = np.array(mask)
+        ground_truth_mask =  np.array(mask)
         
         original_size = tuple(image.size)[::-1]
         ground_truth_mask = cv2.resize(ground_truth_mask, (original_size[1], original_size[0]), interpolation=cv2.INTER_NEAREST)
-        
-        if self.mode == 'hello':
+        if(self.mode == 'hello'):
             transformed = self.transforms(image=np.array(image), mask=ground_truth_mask)
-            image, ground_truth_mask = transformed["image"], transformed['mask']
+            image, gt_mask = transformed["image"], transformed['mask']
         
-        if self.type == 'binary':
+        # if(self.mode in ["train","val"]):
+        if(self.type == 'binary'):
             ground_truth_mask = np.uint8(ground_truth_mask > 0)
+        if(self.cfg.DATASET.IGNORE_BG and self.mode=="train"):
+            unique_labels = np.unique(ground_truth_mask)[1:].astype(np.uint8)  # Exclude background (0)
+        else:
+            unique_labels = np.unique(ground_truth_mask).astype(np.uint8)  # Exclude background (0)
+            # unique_labels = np.unique(ground_truth_mask)
 
-        unique_labels = np.array([1])
+            # unique_label = random.choice(unique_labels.tolist())
 
+            # # get bounding box prompt
+            # box = utils.get_bounding_box(ground_truth_mask)
+            # inputs = self.processor(image, original_size, box)
+            # inputs.ground_truth_mask"] = torch.from_numpy(ground_truth_mask)
+            # inputs["image_name"] = basename(img_path)
+            # inputs["text_labels"] = torch.from_numpy(unique_labels)[None,:]
+
+            # return inputs
+        
+        # else:
+        #     unique_label = self.caption_mapping[self.caption]
+
+        # unique_label = np.array([unique_label])
+        # ground_truth_mask = np.uint8(ground_truth_mask == unique_label)
+        # if(np.max(ground_truth_mask) == 0):
+        #     return None
+        # get bounding box prompt
+        
+        # box = utils.get_bounding_box(ground_truth_mask)
         inputs = self.processor(image, original_size)
+        # binary_masks = [np.uint8(ground_truth_mask == label) for label in unique_labels] + [np.uint8(ground_truth_mask != label) for label in unique_labels]
         binary_masks = [np.uint8(ground_truth_mask == label) for label in unique_labels]
         inputs["ground_truth_mask"] = torch.from_numpy(np.stack(binary_masks))
+        # inputs["ground_truth_mask"] = torch.tensor(ground_truth_mask)
         inputs["image_name"] = basename(img_path)
         inputs["mask_name"] = basename(mask_path)
-        inputs["text_labels"] = torch.from_numpy(unique_labels)[None, :]
+        inputs["text_labels"] = torch.from_numpy(unique_labels)[None,:]
         inputs["clip_image"] = clip_image
-
-        # Assign 0 if filename starts with 'H' (Healthy), 1 if 'C' (Condition/Unhealthy)
-        filename = basename(img_path)
-        if filename.startswith('H'):
-            inputs["label"] = torch.tensor(0, dtype=torch.long)
-        elif filename.startswith('C'):
-            inputs["label"] = torch.tensor(1, dtype=torch.long)
-        else:
-            raise ValueError(f"Filename '{filename}' does not start with 'H' or 'C'.")
-
         return inputs
-
 
 
     

@@ -7,7 +7,7 @@ DATASET:
   MASK_FORMAT: ".tif"
   NUM_SHOTS: -1
   TYPE: "binary"
-  IGNORE_BG: False
+  IGNORE_BG: True
 
 SAM:
   MODEL: "vit_b" # [vit_h, vit_l, vit_b, default]
@@ -15,9 +15,9 @@ SAM:
   RANK: 4
 
 TRAIN:
-  BATCH_SIZE: 4
-  NUM_EPOCHS: 20
-  LEARNING_RATE: 0.003
+  BATCH_SIZE: 1
+  NUM_EPOCHS: 5
+  LEARNING_RATE: 0.001
 
 TEST:
   USE_LATEST: False
@@ -33,4 +33,4 @@ PROMPT_LEARNER:
   CSC: False
   CLASS_TOKEN_POSITION: "end"
   BACKBONE: "ViT-B/16"
-  CLASSNAMES: ["background","tumor"]
+  CLASSNAMES: ["background", "tumor"]

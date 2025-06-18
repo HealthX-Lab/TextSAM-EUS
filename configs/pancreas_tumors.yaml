@@ -5,7 +5,7 @@ DATASET:
   TEST_PATH: "./data/pancreas_tumors/test"
   IMAGE_FORMAT: ".tif"
   MASK_FORMAT: ".tif"
-  NUM_SHOTS: -1
+  NUM_SHOTS: 100
   TYPE: "binary"
   IGNORE_BG: False
 
@@ -16,7 +16,7 @@ SAM:
 
 TRAIN:
   BATCH_SIZE: 4
-  NUM_EPOCHS: 5
+  NUM_EPOCHS: 1
   LEARNING_RATE: 0.002
 
 TEST:
@@ -33,4 +33,4 @@ PROMPT_LEARNER:
   CSC: True
   CLASS_TOKEN_POSITION: "end"
   BACKBONE: "ViT-B/16"
-  CLASSNAMES: ["healthy pancreas","pancreas with tumor"]
+  CLASSNAMES: ["background","pancreas tumor"]
