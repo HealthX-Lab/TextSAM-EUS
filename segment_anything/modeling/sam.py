@@ -133,7 +133,7 @@ class Sam(nn.Module):
                     "low_res_logits": low_res_mask_reshaped,
                 }
             )
-        return outputs,sparse_embeddings
+        return outputs
 
     def postprocess_masks(
         self,

@@ -5,14 +5,47 @@
 # LICENSE file in the root directory of this source tree.
 
 import torch
+import os
+import requests
+from tqdm import tqdm
 
 from functools import partial
 
 from .modeling import ImageEncoderViT, MaskDecoder, PromptEncoder, Sam, TwoWayTransformer
 
+files = {
+    "sam_vit_b_01ec64.pth": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth",
+    "sam_vit_l_0b3195.pth": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_l_0b3195.pth",
+    "sam_vit_h_4b8939.pth": "https://dl.fbaipublicfiles.com/segment_anything/sam_vit_h_4b8939.pth",
+}
 
-def build_sam_vit_h(checkpoint=None):
+backbones = {
+    "vit_l": "sam_vit_l_0b3195.pth",
+    "vit_b": "sam_vit_b_01ec64.pth",
+    "vit_h": "sam_vit_h_4b8939.pth",
+    "default": "sam_vit_h_4b8939.pth"
+}
+
+# Function to download a file
+def download_file(url, filepath):
+    print(f"Downloading {filepath}...")
+    response = requests.get(url, stream=True)
+    if response.status_code == 200:
+        total_size = int(response.headers.get('content-length', 0))
+        with open(filepath, "wb") as file:
+            # Use tqdm to show the progress bar
+            with tqdm(total=total_size, unit='B', unit_scale=True, desc=filepath) as pbar:
+                for chunk in response.iter_content(chunk_size=1024):
+                    file.write(chunk)
+                    pbar.update(len(chunk))  # Update progress bar by the chunk size
+        print(f"{filepath} downloaded successfully.")
+    else:
+        print(f"Failed to download {filepath}. HTTP Status Code: {response.status_code}")
+
+
+def build_sam_vit_h(cfg=None, checkpoint=None):
     return _build_sam(
+        cfg,
         encoder_embed_dim=1280,
         encoder_depth=32,
         encoder_num_heads=16,
@@ -24,8 +57,9 @@ def build_sam_vit_h(checkpoint=None):
 build_sam = build_sam_vit_h
 
 
-def build_sam_vit_l(checkpoint=None):
+def build_sam_vit_l(cfg=None, checkpoint=None):
     return _build_sam(
+        cfg,
         encoder_embed_dim=1024,
         encoder_depth=24,
         encoder_num_heads=16,
@@ -34,8 +68,9 @@ def build_sam_vit_l(checkpoint=None):
     )
 
 
-def build_sam_vit_b(checkpoint=None):
+def build_sam_vit_b(cfg=None, checkpoint=None):
     return _build_sam(
+        cfg,
         encoder_embed_dim=768,
         encoder_depth=12,
         encoder_num_heads=12,
@@ -53,6 +88,7 @@ sam_model_registry = {
 
 
 def _build_sam(
+    cfg,
     encoder_embed_dim,
     encoder_depth,
     encoder_num_heads,
@@ -99,9 +135,16 @@ def _build_sam(
         pixel_mean=[123.675, 116.28, 103.53],
         pixel_std=[58.395, 57.12, 57.375],
     )
-    sam.train()
+    sam.eval()
+    filename = backbones[cfg.SAM.TEACHER_MODEL]
+    url = files[filename]
+    checkpoint = os.path.join(checkpoint, filename)
+    # filepath = os.path.join(checkpoint, filename)
+    if not os.path.exists(checkpoint):
+        print(f"{filename} not found in {checkpoint}. Downloading...")
+        download_file(url, checkpoint)
     if checkpoint is not None:
         with open(checkpoint, "rb") as f:
             state_dict = torch.load(f)
-        sam.load_state_dict(state_dict)
+        sam.load_state_dict(state_dict,strict=False)
     return sam

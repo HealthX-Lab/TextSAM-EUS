@@ -3,10 +3,10 @@ OUTPUT=$2
 
 for SEED in 3
 do
-    python train.py --config-file configs/${CFG}.yaml \
-    --output-dir ${OUTPUT} \
-    --seed ${SEED} \
-    --resume
+    # python train.py --config-file configs/${CFG}.yaml \
+    # --output-dir ${OUTPUT} \
+    # --seed ${SEED} \
+    # --resume
 
     python inference_eval_text.py --config-file configs/${CFG}.yaml \
     --output-dir ${OUTPUT} \

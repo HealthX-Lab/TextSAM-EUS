@@ -8,6 +8,9 @@ import torch
 from torch.nn.functional import pad
 import yaml
 import os
+from scipy.ndimage import center_of_mass
+import numpy as np
+import torch
 
 
 def show_mask(mask: np.array, ax, random_color=False):
@@ -60,7 +63,7 @@ def plot_image_mask_dataset(dataset: torch.utils.data.Dataset, idx: int):
     plot_image_mask(image, mask)
 
 
-def get_bounding_box(ground_truth_map: np.array) -> list:
+def get_bounding_box(ground_truth_map: np.array, device="cuda:0") -> list:
   """
   Get the bounding box of the image with the ground truth mask
   
@@ -72,6 +75,7 @@ def get_bounding_box(ground_truth_map: np.array) -> list:
 
   """
   # get bounding box from mask
+  ground_truth_map = ground_truth_map.detach().cpu().numpy()
   idx = np.where(ground_truth_map > 0)
   x_indices = idx[1]
   y_indices = idx[0]
@@ -83,9 +87,65 @@ def get_bounding_box(ground_truth_map: np.array) -> list:
   x_max = min(W, x_max + np.random.randint(0, 20))
   y_min = max(0, y_min - np.random.randint(0, 20))
   y_max = min(H, y_max + np.random.randint(0, 20))
-  bbox = [x_min, y_min, x_max, y_max]
-
+  bbox = torch.tensor([x_min, y_min, x_max, y_max], dtype=torch.int, device=device).unsqueeze(0)
   return bbox
+
+def get_extreme_points(ground_truth_mask, unique_labels, device="cuda"):
+    ground_truth_mask = ground_truth_mask.detach().cpu().numpy()
+    unique_labels = unique_labels.detach().cpu().numpy()
+    def compute_extremes(mask):
+        indices = np.argwhere(mask)
+        if len(indices) == 0:
+            return []
+        top = indices[np.argmin(indices[:, 0])]
+        bottom = indices[np.argmax(indices[:, 0])]
+        left = indices[np.argmin(indices[:, 1])]
+        right = indices[np.argmax(indices[:, 1])]
+        return [left[::-1], right[::-1], top[::-1], bottom[::-1]]  # x, y order
+
+    points = []
+    point_labels = []
+    for label in unique_labels:
+        mask = ground_truth_mask == label
+        extremes = compute_extremes(mask)
+        if extremes:
+            points.extend(extremes)
+            point_labels.extend([label] * len(extremes))
+    return torch.tensor(points, dtype=torch.float, device=device), torch.tensor(point_labels, dtype=torch.long, device=device)
+
+def get_centroid_points(ground_truth_mask, unique_labels, device='cuda'):
+    points = []
+    point_labels = []
+    for label in unique_labels:
+        binary_mask = ground_truth_mask == label
+        binary_mask = binary_mask.detach().cpu().numpy()
+        if np.any(binary_mask):
+            cy, cx = center_of_mass(binary_mask)
+            points.append([cx, cy])
+            point_labels.append(label)
+    return torch.tensor(points, dtype=torch.float, device=device), torch.tensor(point_labels, dtype=torch.long, device=device)
+
+def get_random_points(ground_truth_mask, unique_labels, num_points_per_label=1, device="cuda"):
+    points = []
+    point_labels = []
+
+    ground_truth_mask = ground_truth_mask.detach().cpu().numpy()
+    unique_labels = unique_labels.detach().cpu().numpy()
+
+    for label in unique_labels:
+        indices = np.argwhere(ground_truth_mask == label)
+        if len(indices) > 0:
+            # Randomly choose without replacement if enough points, else sample with replacement
+            if len(indices) >= num_points_per_label:
+                chosen_indices = indices[np.random.choice(len(indices), size=num_points_per_label, replace=False)]
+            else:
+                chosen_indices = indices[np.random.choice(len(indices), size=num_points_per_label, replace=True)]
+            
+            for y, x in chosen_indices:
+                points.append([x, y])
+                point_labels.append(label)
+
+    return torch.tensor(points, dtype=torch.float, device=device), torch.tensor(point_labels, dtype=torch.long, device=device)
 
 
 def stacking_batch(batch, outputs):

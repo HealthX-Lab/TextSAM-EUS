@@ -50,7 +50,8 @@ class TextPromptEncoderBiomedCLIP(PromptEncoder):
         masks,
         labels,
         image_embeddings,
-        clip_image
+        clip_image,
+        original_size
     ):
         """
         Embeds different types of prompts, returning both sparse and dense
@@ -82,16 +83,16 @@ class TextPromptEncoderBiomedCLIP(PromptEncoder):
 
             prompts, ctx, deep_prompts = self.prompt_learner()
 
-            image_features = self.clip_model.encode_image(clip_image.unsqueeze(0).cuda(), ctx, deep_prompts)
+            # image_features = self.clip_model.encode_image(clip_image.unsqueeze(0).cuda(), ctx, deep_prompts)
             text_features = self.clip_model.encode_text(self.tokenized_prompts, prompts, deep_prompts)
-            text_features = text_features / text_features.norm(dim=-1, keepdim=True) # (N, 512)
+            # text_features = text_features / text_features.norm(dim=-1, keepdim=True) # (N, 512)
 
-            cls_token = image_features[:, 0, :]
-            seg_logits = image_features[:, 1:, :]
-            cls_token = cls_token / cls_token.norm(dim=-1, keepdim=True) # (N, 512)
-            seg_logits = seg_logits / seg_logits.norm(dim=-1, keepdim=True) # (N, 512)
-            seg_logits = logit_scale * seg_logits @ text_features.T
-            image_features = image_features / image_features.norm(dim=-1, keepdim=True) # (N, 512)
+            # cls_token = image_features[:, 0, :]
+            # seg_logits = image_features[:, 1:, :]
+            # cls_token = cls_token / cls_token.norm(dim=-1, keepdim=True) # (N, 512)
+            # seg_logits = seg_logits / seg_logits.norm(dim=-1, keepdim=True) # (N, 512)
+            # seg_logits = logit_scale * seg_logits @ text_features.T
+            # image_features = image_features / image_features.norm(dim=-1, keepdim=True) # (N, 512)
 
             labels = [label.item() for label in labels]
             text_features = text_features[labels]
@@ -115,6 +116,15 @@ class TextPromptEncoderBiomedCLIP(PromptEncoder):
                 sparse_embeddings_all.append(torch.cat([sparse_embeddings, text_embeddings], dim=1))
 
             sparse_embeddings = torch.cat(sparse_embeddings_all, dim=0)
+
+        if points is not None:
+            coords, labels = points
+            point_embeddings = self._embed_points(coords, labels, pad=(boxes is None))
+            sparse_embeddings = torch.cat([sparse_embeddings, point_embeddings], dim=1)
+        
+        if boxes is not None:
+            box_embeddings = self._embed_boxes(boxes)
+            sparse_embeddings = torch.cat([sparse_embeddings, box_embeddings], dim=1)
 
         if masks is not None:
             dense_embeddings = self._embed_masks(masks)

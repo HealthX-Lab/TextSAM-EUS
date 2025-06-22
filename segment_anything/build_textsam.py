@@ -112,6 +112,16 @@ def _build_textsam(
             classnames=classnames
         )
 
+    # if(cfg.PROMPT_LEARNER.MODEL == "biomedclip" and cfg.PROMPT_LEARNER.MODALITY == "multimodal"):
+    #     clip_prompt_encoder = MultimodalPromptEncoderBiomedCLIP(
+    #         cfg=cfg,
+    #         embed_dim=prompt_embed_dim,
+    #         image_embedding_size=(image_embedding_size, image_embedding_size),
+    #         input_image_size=(image_size, image_size),
+    #         mask_in_chans=16,
+    #         classnames=classnames
+    #     )
+
     elif(cfg.PROMPT_LEARNER.MODEL == "clip" and cfg.PROMPT_LEARNER.MODALITY == "text"):
         clip_prompt_encoder = TextPromptEncoderCLIP(
             cfg=cfg,
@@ -166,9 +176,13 @@ def _build_textsam(
             state_dict = torch.load(f)
         sam.load_state_dict(state_dict,strict=False)
 
+    # params_to_update = ["prompt_learner", "text_head", "image_head"]
     params_to_update = ["prompt_learner", "text_head"]
 
     for name,param in sam.named_parameters():
+
+        # if("mask_logvars" in name):
+        #     param.requires_grad_(True)
 
         if(name.startswith("prompt_encoder")):
             
@@ -177,11 +191,11 @@ def _build_textsam(
                 if(p in name):
                     param.requires_grad_(True)
                     
-        elif(name.startswith("image_encoder")):
-            if("prompt_token_proj" in name):
-                param.requires_grad_(True)
-            else:
-                param.requires_grad_(False)
-        else:
-            param.requires_grad_(False)
+        # elif(name.startswith("image_encoder")):
+        #     if("prompt_token_proj" in name):
+        #         param.requires_grad_(True)
+        #     else:
+        #         param.requires_grad_(False)
+        # else:
+        #     param.requires_grad_(False)
     return sam

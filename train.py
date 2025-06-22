@@ -98,17 +98,19 @@ def logger_config(log_path):
     return loggerr
 
 # Validation function
-def evaluate_validation_loss(model, val_dataloader, device, seg_loss):
+def evaluate_validation_loss(model, val_dataloader, device, seg_loss, ce_loss):
     model.eval()  # Set model to evaluation mode
     val_losses = []
     with torch.no_grad():
         for batch in tqdm(val_dataloader, desc="Validation"):
             outputs = model(batched_input=batch, multimask_output=False)
+            # loss_consistency = torch.sum(torch.stack([out["loss_consistency"] for out in outputs], dim=0),dim=0)
             stk_gt, stk_out = utils.stacking_batch(batch, outputs)
             stk_out = stk_out.squeeze(1).permute(1,0,2,3)
             # stk_out = stk_out.squeeze(1)
             # stk_gt = stk_gt.unsqueeze(1)  # Convert to [B, C, H, W]
-            loss = seg_loss(stk_out, stk_gt.float().to(device))
+            loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device))
+            # loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device)) + loss_consistency
             val_losses.append(loss.item())
     return mean(val_losses)
 
@@ -212,14 +214,15 @@ for epoch in range(start_epoch, num_epochs):
         # print(batch[0]["ground_truth_mask"])
         stk_gt, stk_out = utils.stacking_batch(batch, outputs)
         stk_out = stk_out.squeeze(1).permute(1,0,2,3)
+        # loss_consistency = torch.sum(torch.stack([out["loss_consistency"] for out in outputs], dim=0),dim=0)
         # stk_gt = stk_gt.unsqueeze(1)  # We need to get the [B, C, H, W] starting from [H, W]
         # mask_pred = np.uint8(outputs[0]['masks'].detach().cpu().numpy()) * 255
         # print(np.unique(mask_pred))
         # print(sparse_embeddings.shape,teacher_sparse_embeddings.shape)
         # loss = seg_loss(stk_out, stk_gt.float().to(device))  + mse_loss(sparse_embeddings,teacher_sparse_embeddings)
-        # loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device))
         loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device))
-        # loss = seg_loss(stk_out, stk_gt.float().to(device))
+        # loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device)) + loss_consistency
+        # loss = seg_loss(stk_out, stk_gt.float().to(device)) + loss_consistency
 
         optimizer.zero_grad()
         loss.backward()
@@ -235,7 +238,7 @@ for epoch in range(start_epoch, num_epochs):
     epoch_time.append(epoch_end_time - epoch_start_time)
     mean_epoch_loss = mean(epoch_losses)
     # Validation phase
-    mean_val_loss = evaluate_validation_loss(model, val_dataloader, device, seg_loss)
+    mean_val_loss = evaluate_validation_loss(model, val_dataloader, device, seg_loss, ce_loss)
     print(f'EPOCH: {epoch+1} | Training Loss: {mean_epoch_loss:.4f} | Validation Loss: {mean_val_loss:.4f}')
 
     # Save the best model based on validation loss

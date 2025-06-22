@@ -39,13 +39,14 @@ class DatasetSegmentation(Dataset):
             ground_truth_mask: Ground truth mask
     """
 
-    def __init__(self, cfg: dict, processor: Samprocessor, mode: str, num_shots: int = -1, seed: int = None, caption=""):
+    def __init__(self, cfg: dict, processor: Samprocessor, mode: str, num_shots: int = -1, seed: int = None, device="cuda:0", caption=""):
         super().__init__()
 
         self.mode = mode
         self.type = cfg.DATASET.TYPE
         self.cfg = cfg
         # train_list_file = cfg.DATASET.TRAIN_LIST
+        self.device = device
 
 
         if self.mode == "train":
@@ -131,20 +132,21 @@ class DatasetSegmentation(Dataset):
         # if(self.mode in ["train","val"]):
         if(self.type == 'binary'):
             ground_truth_mask = np.uint8(ground_truth_mask > 0)
-        if(self.cfg.DATASET.IGNORE_BG and self.mode=="train"):
-            unique_labels = np.unique(ground_truth_mask)[1:].astype(np.uint8)  # Exclude background (0)
-        else:
-            unique_labels = np.unique(ground_truth_mask).astype(np.uint8)  # Exclude background (0)
+        unique_labels = np.unique(ground_truth_mask)
+        if(self.cfg.DATASET.IGNORE_BG and len(unique_labels)>= 2):
+            unique_labels = unique_labels[1:].astype(np.uint8)  # Exclude background (0)
+        # else:
+        #     unique_labels = np.unique(ground_truth_mask).astype(np.uint8)  # Exclude background (0)
             # unique_labels = np.unique(ground_truth_mask)
 
             # unique_label = random.choice(unique_labels.tolist())
 
-            # # get bounding box prompt
-            # box = utils.get_bounding_box(ground_truth_mask)
-            # inputs = self.processor(image, original_size, box)
-            # inputs.ground_truth_mask"] = torch.from_numpy(ground_truth_mask)
-            # inputs["image_name"] = basename(img_path)
-            # inputs["text_labels"] = torch.from_numpy(unique_labels)[None,:]
+        # get bounding box prompt
+        # box = utils.get_bounding_box(ground_truth_mask)
+        # inputs = self.processor(image, original_size, box)
+        # inputs.["ground_truth_mask"] = torch.from_numpy(ground_truth_mask)
+        # inputs["image_name"] = basename(img_path)
+        # inputs["text_labels"] = torch.from_numpy(unique_labels)[None,:]
 
             # return inputs
         
@@ -157,12 +159,16 @@ class DatasetSegmentation(Dataset):
         #     return None
         # get bounding box prompt
         
-        # box = utils.get_bounding_box(ground_truth_mask)
+        # box = utils.get_bounding_box(ground_truth_mask, self.device)
+        # points, labels = utils.get_centroid_points(ground_truth_mask, unique_labels, device=self.device)
         inputs = self.processor(image, original_size)
         # binary_masks = [np.uint8(ground_truth_mask == label) for label in unique_labels] + [np.uint8(ground_truth_mask != label) for label in unique_labels]
         binary_masks = [np.uint8(ground_truth_mask == label) for label in unique_labels]
         inputs["ground_truth_mask"] = torch.from_numpy(np.stack(binary_masks))
+        # inputs["points"] = points,labels
+        # inputs["boxes"] = box
         # inputs["ground_truth_mask"] = torch.tensor(ground_truth_mask)
+        inputs["original_size"] = original_size
         inputs["image_name"] = basename(img_path)
         inputs["mask_name"] = basename(mask_path)
         inputs["text_labels"] = torch.from_numpy(unique_labels)[None,:]

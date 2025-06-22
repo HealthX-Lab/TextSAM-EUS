@@ -12,4 +12,3 @@ from .prompt_encoder import PromptEncoder
 from .transformer import TwoWayTransformer
 from .text_prompt_encoder_biomedclip import TextPromptEncoderBiomedCLIP
 from .text_prompt_encoder_clip import TextPromptEncoderCLIP
-from .multimodal_prompt_encoder import MultimodalPromptEncoder
