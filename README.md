@@ -73,11 +73,7 @@ data/
 bash scripts/pipeline.sh EUS outputs
 ```
 
-* You can change some design settings in the config:
-```
-|   |–– configs/
-|   |   |–– EUS.yaml/
-```
+* You can change some design settings in the [config](https://github.com/HealthX-Lab/PanTumorUSSeg/blob/main/configs/EUS.yaml).
 
 <hr />
 
