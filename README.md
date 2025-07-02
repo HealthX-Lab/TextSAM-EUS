@@ -86,4 +86,4 @@ If you use our work, please consider citing:
 
 ## Acknowledgements
 
-Our code builds upon the [open_clip](https://github.com/mlfoundations/open_clip), [segment-anything](https://github.com/facebookresearch/segment-anything), and [MaPLe](https://github.com/muzairkhattak/multimodal-prompt-learning)repositories. We are grateful to the authors for making their code publicly available. If you use our model or code, we kindly request that you also consider citing these foundational works.
+Our code builds upon the [open_clip](https://github.com/mlfoundations/open_clip), [segment-anything](https://github.com/facebookresearch/segment-anything), and [MaPLe](https://github.com/muzairkhattak/multimodal-prompt-learning) repositories. We are grateful to the authors for making their code publicly available. If you use our model or code, we kindly request that you also consider citing these foundational works.
