@@ -1,12 +1,12 @@
 # TextSAM-EUS: Text Prompt Learning for SAM to Accurately Segment Pancreatic Tumor in Endoscopic Ultrasound
 **[Health-X Lab](http://www.healthx-lab.ca/)** | **[IMPACT Lab](https://users.encs.concordia.ca/~impact/)** 
 
-[Pascal Spiegler](), [Taha Koleilat](https://tahakoleilat.github.io/), [Arash Harirpoush](), [Corey S. Miller](), [Hassan Rivaz](https://users.encs.concordia.ca/~hrivaz/), [Marta Kersten-Oertel](), [Yiming Xiao](https://yimingxiao.weebly.com/curriculum-vitae.html)
+[Pascal Spiegler](https://scholar.google.com/citations?user=FoihFT0AAAAJ&hl=en), [Taha Koleilat](https://tahakoleilat.github.io/), [Arash Harirpoush](https://scholar.google.com/citations?user=-jhPnlgAAAAJ&hl=en), [Corey S. Miller](https://www.mcgill.ca/gastroenterology/corey-miller), [Hassan Rivaz](https://users.encs.concordia.ca/~hrivaz/), [Marta Kersten-Oertel](https://www.martakersten.ca/), [Yiming Xiao](https://yimingxiao.weebly.com/curriculum-vitae.html)
 
-[![paper](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)](https://arxiv.org/abs/2411.15232)
+[![paper](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)]()
 [![Overview](https://img.shields.io/badge/Overview-Read-blue.svg)](#overview)
-[![Datasets](https://img.shields.io/badge/Datasets-Access-yellow.svg)](https://huggingface.co/datasets/TahaKoleilat/BiomedCoOp)
-[![Models](https://img.shields.io/badge/Models-Reproduce-orange.svg)](https://huggingface.co/TahaKoleilat/BiomedCoOp)
+[![Datasets](https://img.shields.io/badge/Datasets-Access-yellow.svg)]()
+[![Models](https://img.shields.io/badge/Models-Reproduce-orange.svg)]()
 [![BibTeX](https://img.shields.io/badge/BibTeX-Cite-blueviolet.svg)](#citation)
 
 ## Overview
