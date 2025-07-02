@@ -49,9 +49,6 @@ class TextPromptEncoderBiomedCLIP(PromptEncoder):
         boxes,
         masks,
         labels,
-        image_embeddings,
-        clip_image,
-        original_size
     ):
         """
         Embeds different types of prompts, returning both sparse and dense
@@ -79,35 +76,15 @@ class TextPromptEncoderBiomedCLIP(PromptEncoder):
 
         if labels is not None:
 
-            logit_scale = self.logit_scale.exp()
-
             prompts, ctx, deep_prompts = self.prompt_learner()
 
-            # image_features = self.clip_model.encode_image(clip_image.unsqueeze(0).cuda(), ctx, deep_prompts)
             text_features = self.clip_model.encode_text(self.tokenized_prompts, prompts, deep_prompts)
-            # text_features = text_features / text_features.norm(dim=-1, keepdim=True) # (N, 512)
-
-            # cls_token = image_features[:, 0, :]
-            # seg_logits = image_features[:, 1:, :]
-            # cls_token = cls_token / cls_token.norm(dim=-1, keepdim=True) # (N, 512)
-            # seg_logits = seg_logits / seg_logits.norm(dim=-1, keepdim=True) # (N, 512)
-            # seg_logits = logit_scale * seg_logits @ text_features.T
-            # image_features = image_features / image_features.norm(dim=-1, keepdim=True) # (N, 512)
 
             labels = [label.item() for label in labels]
             text_features = text_features[labels]
             
             text_features = self.text_head(text_features)
             text_features = text_features / text_features.norm(dim=-1, keepdim=True) # (N, 512)
-
-            # image_features = self.image_head(image_features)
-
-            # cls_token = image_features[:,0,:].unsqueeze(1)
-            # patch_features = image_features[:,1:,:]
-            # patch_features = patch_features.reshape(1, 14, 14, -1).permute(0,3,1,2)
-            # patch_features = F.interpolate(patch_features, size=(64, 64), mode='bilinear', align_corners=False)
-            # patch_features = patch_features / patch_features.norm(dim=1, keepdim=True) # (N, 512)
-            
 
             sparse_embeddings_all = []
             
@@ -199,23 +176,16 @@ class MultiModalPromptLearner(nn.Module):
             ctx_vectors = torch.empty(n_ctx, ctx_dim, dtype=dtype)
             nn.init.normal_(ctx_vectors, std=0.02)
             prompt_prefix = " ".join(["X"] * n_ctx)
-        print('MaPLe design: Multi-modal Prompt Learning')
+
         print(f'Initial context: "{prompt_prefix}"')
-        print(f"Number of MaPLe context words (tokens): {n_ctx}")
+        print(f"Number of context words (tokens): {n_ctx}")
 
         self.ctx = nn.Parameter(ctx_vectors)
 
         self.deep_prompts = nn.ParameterList([nn.Parameter(torch.empty(n_ctx, 768)) for _ in range(self.prompts_depth - 1)])
 
-        # self.vision_deep_prompts = nn.ParameterList([nn.Parameter(torch.empty(n_ctx, 768)) for _ in range(self.prompts_depth - 1)])
-
-        # self.compound_prompts_text = nn.ParameterList([nn.Parameter(torch.empty(n_ctx, 512))
-        #                                               for _ in range(self.compound_prompts_depth - 1)])
         for single_prompt in self.deep_prompts:
             nn.init.normal_(single_prompt, std=0.02)
-
-        # for single_prompt in self.vision_deep_prompts:
-        #     nn.init.normal_(single_prompt, std=0.02)
 
         classnames = [name.replace("_", " ") for name in classnames]
         name_lens = [len(self.tokenizer(name)) for name in classnames]
@@ -278,14 +248,12 @@ class CustomCLIP(nn.Module):
         self.prompt_depth = cfg.PROMPT_LEARNER.PROMPT_DEPTH_TEXT
         self.prompt_length = cfg.PROMPT_LEARNER.N_CTX_TEXT
         self.output_hidden_states = output_hidden_states
-        # self.prompt_tokens = nn.Parameter(torch.empty(prompt_depth, prompt_length, 768))
         self.dtype = self.text_model.transformer.dtype
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def encode_image(self, x, ctx: torch.Tensor = None, prompt_tokens: torch.Tensor = None):
         trunk = self.vision_model.trunk
         x = trunk.patch_embed(x)
-        # C, H, W = x.shape
         x = trunk._pos_embed(x)
         ctx = ctx.expand(x.shape[0], -1, -1)
         x = torch.cat([x, ctx], dim=1)
@@ -345,10 +313,6 @@ class CustomCLIP(nn.Module):
         return projected
     
     def forward(self, image):
-
-        B, C, H, W = image.shape
-
-        logit_scale = self.logit_scale.exp()
 
         # prompts, ctx, text_deep_prompts, image_deep_prompts = self.prompt_learner()
         prompts, ctx, deep_prompts = self.prompt_learner()

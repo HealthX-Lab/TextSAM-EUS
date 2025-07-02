@@ -136,10 +136,9 @@ def _build_sam(
         pixel_std=[58.395, 57.12, 57.375],
     )
     sam.eval()
-    filename = backbones[cfg.SAM.TEACHER_MODEL]
+    filename = backbones[cfg.SAM.MODEL]
     url = files[filename]
     checkpoint = os.path.join(checkpoint, filename)
-    # filepath = os.path.join(checkpoint, filename)
     if not os.path.exists(checkpoint):
         print(f"{filename} not found in {checkpoint}. Downloading...")
         download_file(url, checkpoint)
@@ -147,4 +146,5 @@ def _build_sam(
         with open(checkpoint, "rb") as f:
             state_dict = torch.load(f)
         sam.load_state_dict(state_dict,strict=False)
+
     return sam

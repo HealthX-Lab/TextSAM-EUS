@@ -127,10 +127,6 @@ with torch.no_grad():
         stk_out = torch.cat([out["masks"].squeeze(0) for out in outputs], dim=0)
         text_labels = batch[0]["text_labels"].squeeze(0)
 
-        # mask_prompts = torch.cat([out["low_res_logits"].squeeze(0) for out in outputs], dim=0)
-        # mask_prompts = mask_prompts.unsqueeze(1)
-        # mask_prompts = F.interpolate(mask_prompts, size=(256, 256), mode="bilinear", align_corners=False)
-
         all_points = []
         all_labels = []
         all_boxes = []
@@ -138,10 +134,8 @@ with torch.no_grad():
         for b in range(stk_out.shape[0]):  # batch size
             mask = stk_out[b]              # shape: (H, W) or (C, H, W)
 
-            pts, lbls = utils.get_centroid_points(mask, text_labels)
-            # pts, lbls = utils.get_random_points(mask, text_labels, num_points_per_label=5)
-            # pts, lbls = utils.get_extreme_points(mask, text_labels)
-            box = utils.get_bounding_box(mask)
+            pts, lbls = utils.get_centroid_points(mask.detach().cpu().numpy(), text_labels.detach().cpu().numpy())
+            box = utils.get_bounding_box(mask.detach().cpu().numpy())
             all_boxes.append(box)
             all_points.append(pts)
             all_labels.append(lbls)
@@ -156,8 +150,34 @@ with torch.no_grad():
 
         batch[0]["points"] = points
         batch[0]["boxes"] = bboxes
-        # batch[0]["masks"] = mask_prompts
-        # batch[0].pop("labels",None)
+
+        outputs = model(batched_input=batch, multimask_output=False)
+        stk_out = torch.cat([out["masks"].squeeze(0) for out in outputs], dim=0)
+
+
+        all_points = []
+        all_labels = []
+        all_boxes = []
+
+        for b in range(stk_out.shape[0]):  # batch size
+            mask = stk_out[b]              # shape: (H, W) or (C, H, W)
+
+            pts, lbls = utils.get_centroid_points(mask.detach().cpu().numpy(), text_labels.detach().cpu().numpy())
+            box = utils.get_bounding_box(mask.detach().cpu().numpy())
+            all_boxes.append(box)
+            all_points.append(pts)
+            all_labels.append(lbls)
+
+        # Stack all batch outputs
+        point_coords = torch.stack(all_points)  # shape: (B, N, 2) if N same across batch
+        point_labels = torch.stack(all_labels)  # shape: (B, N)
+        points = point_coords, point_labels
+
+        # Stack to shape (B, 1, 4) — [x_min, y_min, x_max, y_max] per sample
+        bboxes = torch.cat(all_boxes, dim=0)  # (B, 4)
+
+        batch[0]["points"] = points
+        batch[0]["boxes"] = bboxes
 
         outputs = model(batched_input=batch, multimask_output=False)
         stk_out = torch.cat([out["masks"].squeeze(0) for out in outputs], dim=0)
@@ -166,12 +186,6 @@ with torch.no_grad():
             label_j = int(label.detach().cpu())
             mask_pred = np.uint8(stk_out[j].detach().cpu())
             gt_mask = np.uint8(stk_gt[j].detach().cpu())
-
-            intersection = (mask_pred * gt_mask).sum()
-            dice = (2.0 * intersection) / (mask_pred.sum() + gt_mask.sum() + 1e-6)
-
-            dice_scores[classnames[label_j]].append(dice.item())
-            total_dice_values.append(dice.item())
 
             cv2.imwrite(os.path.join(cfg.output_dir,
                                      cfg.DATASET.NAME,
@@ -188,25 +202,3 @@ with torch.no_grad():
                                      classnames[label_j],
                                      results_name,
                                      batch[0]["mask_name"]), gt_mask * 255)
-
-        current_mean_dice = mean(total_dice_values) if total_dice_values else 0.0
-        progress_bar.set_postfix(mean_dice=f"{current_mean_dice:.4f}")
-
-    # ==== Final Reporting ====
-    mean_dice_scores = {}
-    for label, scores in dice_scores.items():
-        if len(scores) > 0:
-            mean_dice_scores[label] = mean(scores)
-        else:
-            mean_dice_scores[label] = 0.0
-
-    overall_average = mean(mean_dice_scores.values()) if len(mean_dice_scores) > 0 else 0.0
-
-    print("\nMean Dice Scores:")
-    logger.info("\nMean Dice Scores:")
-    for label, mean_dice_val in mean_dice_scores.items():
-        print(f"{label}: {mean_dice_val:.4f}")
-        logger.info(f"{label}: {mean_dice_val:.4f}")
-
-    print(f"Overall Average Dice Score: {overall_average:.4f}")
-    logger.info(f"Overall Average Dice Score: {overall_average:.4f}")

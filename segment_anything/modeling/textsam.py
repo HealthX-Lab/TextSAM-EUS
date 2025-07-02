@@ -42,8 +42,6 @@ class TextSam(nn.Module):
         self.prompt_encoder = prompt_encoder
         self.image_encoder = image_encoder
         self.mask_decoder = mask_decoder
-        # self.mask_weights = torch.nn.Parameter(torch.ones(3))
-        # self.mask_logvars = torch.nn.Parameter(torch.zeros(3))  # log(σ²)
         self.register_buffer("pixel_mean", torch.Tensor(pixel_mean).view(-1, 1, 1), False)
         self.register_buffer("pixel_std", torch.Tensor(pixel_std).view(-1, 1, 1), False)
 
@@ -99,26 +97,16 @@ class TextSam(nn.Module):
 
         outputs = []
         for image_record, curr_embedding in zip(batched_input, image_embeddings):
-            if "point_coords" in image_record:
-                points = (image_record["point_coords"], image_record["point_labels"])
-            else:
-                points = None
 
             sparse_embeddings, dense_embeddings = self.prompt_encoder(
                 points=image_record.get("points",None),
                 boxes=image_record.get("boxes",None),
                 masks=image_record.get("masks",None),
-                labels=image_record.get("text_labels",None).squeeze(0),
-                image_embeddings=image_embeddings,
-                clip_image=image_record.get("clip_image",None),
-                original_size=image_record.get("original_size",None)
+                labels=image_record.get("text_labels",None),
             )
 
             sam_image_embedding = curr_embedding.unsqueeze(0)
 
-            # for sparse_embedding in sparse_embeddings:
-              
-            # sparse_embedding = sparse_embedding.unsqueeze(0)
             low_res_masks, iou_predictions = self.mask_decoder(
                 image_embeddings=sam_image_embedding,
                 image_pe=self.prompt_encoder.get_dense_pe(),
@@ -132,22 +120,6 @@ class TextSam(nn.Module):
                 input_size=image_record["image"].shape[-2:],
                 original_size=image_record["original_size"],
             )
-
-            ## Approach 1
-            # weights = torch.softmax(self.mask_weights, dim=0).view(1, 3, 1, 1)  # [1, 3, 1, 1]
-
-            # # Weighted sum across the 3 channels
-            # masks = torch.sum(weights * masks, dim=1, keepdim=True)  # [1, 1, H, W]
-
-            ### Approach 2
-            # # Compute inverse variance weights
-            # precisions = torch.exp(-self.mask_logvars).view(1, -1, 1, 1)  # [1, N, 1, 1]
-
-            # # Fuse logits directly using precision-weighted average
-            # numerator = masks * precisions  # weighted logits
-            # denominator = precisions + 1e-6
-
-            # masks = numerator.sum(dim=1, keepdim=True) / denominator.sum(dim=1, keepdim=True)  # [B, 1, H, W]
 
             low_res_mask_reshaped = masks
             masks = masks > self.mask_threshold

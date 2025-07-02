@@ -3,27 +3,19 @@ import torch.nn as nn
 import monai
 from tqdm import tqdm
 from statistics import mean
-from torch.utils.data import Dataset, DataLoader
-from torchvision import datasets, transforms
-from torch.optim import Adam, AdamW
+from torch.utils.data import DataLoader
+from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.nn.functional import threshold, normalize
-from torchvision.utils import save_image
 import utils.utils as utils
 from datasets.dataloader import DatasetSegmentation, collate_fn
 from utils.processor import Samprocessor
-from segment_anything import build_sam_vit_b, SamPredictor, build_textsam_vit_b,  build_textsam_vit_h, build_textsam_vit_l
+from segment_anything import build_textsam_vit_b,  build_textsam_vit_h, build_textsam_vit_l
 from utils.lora import LoRA_Sam
-import matplotlib.pyplot as plt
-import yaml
-import torch.nn.functional as F
 import os
 from time import time
 import argparse
-import yaml
 import random
 import numpy as np
-import clip
 import logging
 from utils.utils import load_cfg_from_cfg_file
 
@@ -59,6 +51,7 @@ def get_arguments():
         type=str,
         default="", 
         help="output directory")
+    
     parser.add_argument(
             "opts",
             default=None,
@@ -104,13 +97,9 @@ def evaluate_validation_loss(model, val_dataloader, device, seg_loss, ce_loss):
     with torch.no_grad():
         for batch in tqdm(val_dataloader, desc="Validation"):
             outputs = model(batched_input=batch, multimask_output=False)
-            # loss_consistency = torch.sum(torch.stack([out["loss_consistency"] for out in outputs], dim=0),dim=0)
             stk_gt, stk_out = utils.stacking_batch(batch, outputs)
-            stk_out = stk_out.squeeze(1).permute(1,0,2,3)
-            # stk_out = stk_out.squeeze(1)
-            # stk_gt = stk_gt.unsqueeze(1)  # Convert to [B, C, H, W]
+            stk_out = stk_out.squeeze(1)
             loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device))
-            # loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device)) + loss_consistency
             val_losses.append(loss.item())
     return mean(val_losses)
 
@@ -140,7 +129,6 @@ else:
 # Create SAM LoRA
 sam_lora = LoRA_Sam(sam, cfg.SAM.RANK)
 model = sam_lora.sam
-# model = sam
 
 # Process the dataset
 processor = Samprocessor(model)
@@ -161,7 +149,6 @@ print(f"Parameters to be updated: {enabled}")
 print("Number of trainable parameters: ", sum(p.numel() for p in model.parameters() if p.requires_grad))
 # Initialize optimizer and Loss
 optimizer = AdamW(model.parameters(), lr=cfg.TRAIN.LEARNING_RATE)
-# seg_loss = monai.losses.DiceCELoss(sigmoid=True, squared_pred=True, reduction='mean')
 seg_loss = monai.losses.DiceLoss(sigmoid=True, squared_pred=True, reduction='mean')
 ce_loss = nn.BCEWithLogitsLoss(reduction="mean")
 num_epochs = cfg.TRAIN.NUM_EPOCHS
@@ -189,7 +176,6 @@ if cfg.resume and os.path.exists(resume_path):
     checkpoint = torch.load(resume_path)
     model.load_state_dict(checkpoint["model"])
     optimizer.load_state_dict(checkpoint["optimizer"])
-    # scheduler.load_state_dict(checkpoint.get("scheduler", {}))
     start_epoch = checkpoint["epoch"] + 1
     best_loss = checkpoint["best_loss"]
     print(f"Loaded checkpoint from epoch {start_epoch}, best loss: {best_loss:.4f}")
@@ -211,27 +197,15 @@ for epoch in range(start_epoch, num_epochs):
 
     for i, batch in enumerate(tqdm(train_dataloader)):
         outputs = model(batched_input=batch, multimask_output=False)
-        # print(batch[0]["ground_truth_mask"])
         stk_gt, stk_out = utils.stacking_batch(batch, outputs)
-        stk_out = stk_out.squeeze(1).permute(1,0,2,3)
-        # loss_consistency = torch.sum(torch.stack([out["loss_consistency"] for out in outputs], dim=0),dim=0)
-        # stk_gt = stk_gt.unsqueeze(1)  # We need to get the [B, C, H, W] starting from [H, W]
-        # mask_pred = np.uint8(outputs[0]['masks'].detach().cpu().numpy()) * 255
-        # print(np.unique(mask_pred))
-        # print(sparse_embeddings.shape,teacher_sparse_embeddings.shape)
-        # loss = seg_loss(stk_out, stk_gt.float().to(device))  + mse_loss(sparse_embeddings,teacher_sparse_embeddings)
+        stk_out = stk_out.squeeze(1)
         loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device))
-        # loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device)) + loss_consistency
-        # loss = seg_loss(stk_out, stk_gt.float().to(device)) + loss_consistency
 
         optimizer.zero_grad()
         loss.backward()
         # Optimize
         optimizer.step()
         epoch_losses.append(loss.item())
-
-    # Scheduler step at the end of the epoch
-    # scheduler.step()
 
     # End of epoch operations
     epoch_end_time = time()
@@ -249,7 +223,6 @@ for epoch in range(start_epoch, num_epochs):
             "model": model.state_dict(),
             "epoch": epoch,
             "optimizer": optimizer.state_dict(),
-            # "scheduler": scheduler.state_dict(),
             "best_loss": best_loss
         }, os.path.join(
             cfg.output_dir,
@@ -263,7 +236,6 @@ for epoch in range(start_epoch, num_epochs):
         "model": model.state_dict(),
         "epoch": epoch,
         "optimizer": optimizer.state_dict(),
-        # "scheduler": scheduler.state_dict(),
         "best_loss": best_loss
     }, 
     os.path.join(

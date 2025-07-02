@@ -14,15 +14,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.jit import Final
 
-# from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_INCEPTION_MEAN, IMAGENET_INCEPTION_STD, \
-#     OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from .layers import PatchEmbed, Mlp, DropPath, AttentionPoolLatent, RmsNorm, PatchDropout, SwiGLUPacked, SwiGLU, \
     trunc_normal_, lecun_normal_, resample_patch_embed, resample_abs_pos_embed, use_fused_attn, \
     get_act_layer, get_norm_layer, LayerType
-# from ._builder import build_model_with_cfg
-# from ._features import feature_take_indices
-# from ._manipulate import named_apply, checkpoint_seq, adapt_input_conv
-# from ._registry import generate_default_cfgs, register_model, register_model_deprecations
 
 
 class LayerScale(nn.Module):
@@ -140,12 +134,10 @@ class Block(nn.Module):
         if(prompt_tokens is not None):
             prefix = x[:,0:x.shape[1] - prompt_tokens.shape[0], :]
             # Create/configure learnable tokens of this layer
-            # visual_context = self.VPT_shallow.expand(x.shape[1], -1, -1).permute(1, 0, 2).half()
             visual_context = prompt_tokens.expand(x.shape[0], -1, -1)
             # Add the learnable tokens of this layer with the input, by replacing the previous
             # layer learnable tokens
             x = torch.cat([prefix, visual_context], dim=1)
-        # print(x.shape)
         x = x + self.drop_path1(self.ls1(self.attn(self.norm1(x), extract_v=extract_v)))
         x = x + self.drop_path2(self.ls2(self.mlp(self.norm2(x))))
         return x

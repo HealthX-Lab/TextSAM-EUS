@@ -3,10 +3,10 @@ import random
 import torch.nn.functional as F
 import cv2
 import numpy as np
+import torchvision.transforms as T
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Union
 
-import torch
 
 
 class BaseTransform(ABC):
@@ -28,7 +28,16 @@ class BaseTransform(ABC):
     def apply(self, image: np.ndarray, mask: np.ndarray = None):
         raise NotImplementedError
 
+class TorchTransformWrapper(BaseTransform):
+    def end_init_hook(self, transform):
+        self.transform = transform
 
+    def apply(self, image: np.ndarray, mask: np.ndarray = None):
+        pil_image = T.ToPILImage()(image)
+        transformed = self.transform(pil_image)
+        image = np.array(transformed)
+        return image, mask
+    
 class Compose:
     def __init__(self, transforms: List[BaseTransform]):
         if isinstance(transforms, BaseTransform):

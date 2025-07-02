@@ -108,7 +108,7 @@ class Sam(nn.Module):
                 masks=image_record.get("mask_inputs", None),
                 labels=image_record.get("text_labels",None)
             )
-            # print(sparse_embeddings.shape)
+
             low_res_masks, iou_predictions = self.mask_decoder(
                 image_embeddings=curr_embedding.unsqueeze(0),
                 image_pe=self.prompt_encoder.get_dense_pe(),

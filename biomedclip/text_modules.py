@@ -93,7 +93,6 @@ class BertSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        # print(attention_mask)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
@@ -228,7 +227,6 @@ class BertLayer(nn.Module):
     ) -> Tuple[torch.Tensor]:
         if(gating_factor is None):
             if(prompt_tokens is not None):
-                # prefix = hidden_states[:,0:hidden_states.shape[1] - prompt_tokens.shape[0], :]
                 prefix = hidden_states[:, :1, :]
                 suffix = hidden_states[:, 1 + prompt_tokens.shape[0]:, :]
                 textual_context = prompt_tokens.expand(hidden_states.shape[0], -1, -1)

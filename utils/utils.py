@@ -75,7 +75,6 @@ def get_bounding_box(ground_truth_map: np.array, device="cuda:0") -> list:
 
   """
   # get bounding box from mask
-  ground_truth_map = ground_truth_map.detach().cpu().numpy()
   idx = np.where(ground_truth_map > 0)
   x_indices = idx[1]
   y_indices = idx[0]
@@ -91,7 +90,6 @@ def get_bounding_box(ground_truth_map: np.array, device="cuda:0") -> list:
   return bbox
 
 def get_extreme_points(ground_truth_mask, unique_labels, device="cuda"):
-    ground_truth_mask = ground_truth_mask.detach().cpu().numpy()
     unique_labels = unique_labels.detach().cpu().numpy()
     def compute_extremes(mask):
         indices = np.argwhere(mask)
@@ -118,7 +116,6 @@ def get_centroid_points(ground_truth_mask, unique_labels, device='cuda'):
     point_labels = []
     for label in unique_labels:
         binary_mask = ground_truth_mask == label
-        binary_mask = binary_mask.detach().cpu().numpy()
         if np.any(binary_mask):
             cy, cx = center_of_mass(binary_mask)
             points.append([cx, cy])
@@ -128,9 +125,6 @@ def get_centroid_points(ground_truth_mask, unique_labels, device='cuda'):
 def get_random_points(ground_truth_mask, unique_labels, num_points_per_label=1, device="cuda"):
     points = []
     point_labels = []
-
-    ground_truth_mask = ground_truth_mask.detach().cpu().numpy()
-    unique_labels = unique_labels.detach().cpu().numpy()
 
     for label in unique_labels:
         indices = np.argwhere(ground_truth_mask == label)
@@ -226,8 +220,6 @@ def load_cfg_from_cfg_file(file: str):
         cfg_from_file = yaml.safe_load(f)
 
     for key in cfg_from_file:
-
-        # for k, v in cfg_from_file[key].items():
         cfg[key] = cfg_from_file[key]
 
     cfg = CfgNode(cfg)
