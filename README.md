@@ -1,7 +1,7 @@
 # TextSAM-EUS: Text Prompt Learning for SAM to Accurately Segment Pancreatic Tumor in Endoscopic Ultrasound
 **[Health-X Lab](http://www.healthx-lab.ca/)** | **[IMPACT Lab](https://users.encs.concordia.ca/~impact/)** 
 
-[Taha Koleilat](https://tahakoleilat.github.io/), [Hojat Asgariandehkordi](https://scholar.google.com/citations?user=ndXNye4AAAAJ&hl=en), [Hassan Rivaz](https://users.encs.concordia.ca/~hrivaz/), [Yiming Xiao](https://yimingxiao.weebly.com/curriculum-vitae.html)
+[Pascal Spiegler](), [Taha Koleilat](https://tahakoleilat.github.io/), [Arash Harirpoush](), [Corey S. Miller](), [Hassan Rivaz](https://users.encs.concordia.ca/~hrivaz/), [Marta Kersten-Oertel](), [Yiming Xiao](https://yimingxiao.weebly.com/curriculum-vitae.html)
 
 [![paper](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)](https://arxiv.org/abs/2411.15232)
 [![Overview](https://img.shields.io/badge/Overview-Read-blue.svg)](#overview)
@@ -86,4 +86,4 @@ If you use our work, please consider citing:
 
 ## Acknowledgements
 
-Our code builds upon the [open_clip](https://github.com/mlfoundations/open_clip), [[segment-anything](https://github.com/facebookresearch/segment-anything),  and [MaPLe](https://github.com/muzairkhattak/multimodal-prompt-learning)repositories. We are grateful to the authors for making their code publicly available. If you use our model or code, we kindly request that you also consider citing these foundational works.
+Our code builds upon the [open_clip](https://github.com/mlfoundations/open_clip), [segment-anything](https://github.com/facebookresearch/segment-anything), and [MaPLe](https://github.com/muzairkhattak/multimodal-prompt-learning)repositories. We are grateful to the authors for making their code publicly available. If you use our model or code, we kindly request that you also consider citing these foundational works.
