@@ -75,8 +75,6 @@ bash scripts/pipeline.sh EUS outputs
 
 * You can change some design settings in the [config](https://github.com/HealthX-Lab/PanTumorUSSeg/blob/main/configs/EUS.yaml).
 
-<hr />
-
 ## Citation
 If you use our work, please consider citing:
 ```bibtex
