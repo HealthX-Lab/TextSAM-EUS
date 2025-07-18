@@ -29,7 +29,7 @@ This codebase is tested on Ubuntu 20.04.2 LTS with python 3.10. Follow the below
 conda create -n textsam_eus python=3.10 -y
 
 # Activate the environment
-conda activate textsam-eus
+conda activate textsam_eus
 
 # Install torch (requires version >= 2.1.2) and torchvision
 # Please refer to https://pytorch.org/ if you need a different cuda version
@@ -39,9 +39,9 @@ pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorc
 * Clone TextSAM-EUS code repository and install requirements
 ```bash
 # Clone MaPLe code base
-git clone https://github.com/HealthX-Lab/TextSAM_EUS
+git clone https://github.com/HealthX-Lab/TextSAM-EUS
 
-cd TextSAM_EUS/
+cd TextSAM-EUS/
 # Install requirements
 
 pip install -e .
@@ -89,4 +89,3 @@ Our code builds upon the [open_clip](https://github.com/mlfoundations/open_clip)
 - [ ] Upload dataset on HuggingFace
 - [ ] Upload trained model on huggingface
 - [ ] Fill info for paper, dataset, and models
-- [ ] Change Repo Name
