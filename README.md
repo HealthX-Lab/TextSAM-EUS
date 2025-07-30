@@ -3,7 +3,7 @@
 
 [Pascal Spiegler](https://scholar.google.com/citations?user=FoihFT0AAAAJ&hl=en), [Taha Koleilat](https://tahakoleilat.github.io/), [Arash Harirpoush](https://scholar.google.com/citations?user=-jhPnlgAAAAJ&hl=en), [Corey S. Miller](https://www.mcgill.ca/gastroenterology/corey-miller), [Hassan Rivaz](https://users.encs.concordia.ca/~hrivaz/), [Marta Kersten-Oertel](https://www.martakersten.ca/), [Yiming Xiao](https://yimingxiao.weebly.com/curriculum-vitae.html)
 
-[![paper](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)]()
+[![paper](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)](https://www.arxiv.org/abs/2507.18082)
 [![Overview](https://img.shields.io/badge/Overview-Read-blue.svg)](#overview)
 [![Datasets](https://img.shields.io/badge/Datasets-Access-yellow.svg)]()
 [![Models](https://img.shields.io/badge/Models-Reproduce-orange.svg)]()
