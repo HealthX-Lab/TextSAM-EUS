@@ -78,7 +78,12 @@ bash scripts/pipeline.sh EUS outputs
 ## Citation
 If you use our work, please consider citing:
 ```bibtex
-
+@article{spiegler2025textsam,
+  title={TextSAM-EUS: Text Prompt Learning for SAM to Accurately Segment Pancreatic Tumor in Endoscopic Ultrasound},
+  author={Spiegler, Pascal and Koleilat, Taha and Harirpoush, Arash and Miller, Corey S and Rivaz, Hassan and Kersten-Oertel, Marta and Xiao, Yiming},
+  journal={arXiv preprint arXiv:2507.18082},
+  year={2025}
+}
 ```
 
 ## Acknowledgements
