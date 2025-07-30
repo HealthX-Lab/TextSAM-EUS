@@ -101,6 +101,7 @@ def evaluate_validation_loss(model, val_dataloader, device, seg_loss, ce_loss):
             stk_out = stk_out.squeeze(1)
             loss = seg_loss(stk_out, stk_gt.float().to(device)) + ce_loss(stk_out, stk_gt.float().to(device))
             val_losses.append(loss.item())
+    model.train()
     return mean(val_losses)
 
 cfg = get_arguments()
