@@ -5,7 +5,7 @@
 
 [![paper](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)](https://www.arxiv.org/abs/2507.18082)
 [![Overview](https://img.shields.io/badge/Overview-Read-blue.svg)](#overview)
-[![Datasets](https://img.shields.io/badge/Datasets-Access-yellow.svg)](https://drive.google.com/drive/folders/10GPl3r-ppDyWwWzneoSFH52yxUGX4xkw)
+[![Datasets](https://img.shields.io/badge/Datasets-Access-yellow.svg)](https://www.spiedigitallibrary.org/conference-proceedings-of-spie/11583/2581321/Endoscopic-ultrasound-database-of-the-pancreas/10.1117/12.2581321.short)
 [![Checkpoint](https://img.shields.io/badge/Models-Reproduce-orange.svg)](https://drive.google.com/file/d/152U8ZilljXfGSqwN3m77JQpKLXR7mZR0/view)
 [![BibTeX](https://img.shields.io/badge/BibTeX-Cite-blueviolet.svg)](#citation)
 
@@ -49,7 +49,7 @@ pip install -e .
 
 ## Data preparation
 
-* Download the dataset [following the paper of Jaramillo et al.(2020)](https://www.spiedigitallibrary.org/conference-proceedings-of-spie/11583/2581321/Endoscopic-ultrasound-database-of-the-pancreas/10.1117/12.2581321.short).
+* Download the dataset [following the paper of Jaramillo et al. (2020)](https://www.spiedigitallibrary.org/conference-proceedings-of-spie/11583/2581321/Endoscopic-ultrasound-database-of-the-pancreas/10.1117/12.2581321.short).
 
 * Place dataset under `data` like the following:
 ```
