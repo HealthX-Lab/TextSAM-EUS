@@ -50,6 +50,7 @@ pip install -e .
 ## Data preparation
 
 * Download the dataset [following the paper of Jaramillo et al. (2020)](https://www.spiedigitallibrary.org/conference-proceedings-of-spie/11583/2581321/Endoscopic-ultrasound-database-of-the-pancreas/10.1117/12.2581321.short).
+* We do not own the dataset and interested parties should contact the authors of the original data paper.
 
 * Place dataset under `data` like the following:
 ```
